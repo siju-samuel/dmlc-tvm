@@ -15,7 +15,6 @@
 #include "topi/detail/ravel_unravel.h"
 #include "topi/detail/constant_utils.h"
 #include "tvm/tvm.h"
-#include "tvm/ir_pass.h"
 
 namespace topi {
 using namespace tvm;
@@ -311,6 +310,8 @@ inline Array<Tensor> split(const Tensor& x,
   if (axis < 0) {
     axis += static_cast<int>(x->shape.size());
   }
+  CHECK_LT(axis, x->shape.size()) << "axis out of bounds";
+
   auto src_axis_size = static_cast<int>(GetConstInt(x->shape[axis]));
 
   auto split_indices_val = GetConstIntValues(split_indices, "split_indices");
