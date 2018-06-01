@@ -6,6 +6,7 @@
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/device_api.h>
 #include <tvm/runtime/registry.h>
+#include <tvm/runtime/serializer.h>
 #include <memory>
 #include <array>
 #include <string>
@@ -44,7 +45,7 @@ struct RPCArgBuffer {
 };
 
 // Event handler for RPC events.
-class RPCSession::EventHandler {
+class RPCSession::EventHandler : public dmlc::Stream {
  public:
   EventHandler(common::RingBuffer* reader,
                common::RingBuffer* writer,
@@ -71,6 +72,15 @@ class RPCSession::EventHandler {
       return 0;
     }
   }
+  // Request number of bytes from reader.
+  void RequestBytes(size_t nbytes) {
+    pending_request_bytes_ += nbytes;
+    reader_->Reserve(pending_request_bytes_);
+  }
+  // Whether we are ready to handle next request.
+  bool Ready() {
+    return reader_->bytes_available() >= pending_request_bytes_;
+  }
   bool CanCleanShutdown() const {
     return state_ == kRecvCode;
   }
@@ -86,12 +96,12 @@ class RPCSession::EventHandler {
         case kInitHeader: HandleInitHeader(); break;
         case kRecvCode: HandleRecvCode(); break;
         case kRecvCallHandle: {
-          this->Read(&call_handle_, sizeof(call_handle_));
+          CHECK(this->Read(&call_handle_));
           this->SwitchToState(kRecvPackedSeqNumArgs);
           break;
         }
         case kRecvPackedSeqNumArgs: {
-          this->Read(&num_packed_args_, sizeof(num_packed_args_));
+          CHECK(this->Read(&num_packed_args_));
           arg_buf_.reset(new RPCArgBuffer());
           arg_buf_->value.resize(num_packed_args_);
           arg_buf_->tcode.resize(num_packed_args_);
@@ -100,7 +110,7 @@ class RPCSession::EventHandler {
         }
         case kRecvPackedSeqTypeCode: {
           if (num_packed_args_ != 0) {
-            this->Read(arg_buf_->tcode.data(), sizeof(int) * num_packed_args_);
+            this->ReadArray(arg_buf_->tcode.data(), num_packed_args_);
           }
           arg_index_ = 0;
           arg_recv_stage_ = 0;
@@ -164,8 +174,8 @@ class RPCSession::EventHandler {
   }
   // send Packed sequence to writer.
   void SendPackedSeq(const TVMValue* arg_values, const int* type_codes, int n) {
-    writer_->Write(&n, sizeof(n));
-    writer_->Write(type_codes, sizeof(int) * n);
+    this->Write(n);
+    this->WriteArray(type_codes, n);
     // Argument packing.
     for (int i = 0; i < n; ++i) {
       int tcode = type_codes[i];
@@ -173,14 +183,20 @@ class RPCSession::EventHandler {
       switch (tcode) {
         case kDLInt:
         case kDLUInt:
-        case kDLFloat:
+        case kDLFloat: {
+          this->Write<int64_t>(value.v_int64);
+          break;
+        }
         case kTVMType: {
-          writer_->Write(&value, sizeof(TVMValue));
+          this->Write(value.v_type);
+          // padding
+          int32_t padding = 0;
+          this->Write<int32_t>(padding);
           break;
         }
         case kTVMContext: {
           value.v_ctx = StripSessMask(value.v_ctx);
-          writer_->Write(&value, sizeof(TVMValue));
+          this->Write(value.v_ctx);
           break;
         }
         case kFuncHandle:
@@ -188,7 +204,7 @@ class RPCSession::EventHandler {
         case kHandle: {
           // always send handle in 64 bit.
           uint64_t handle = reinterpret_cast<uint64_t>(value.v_handle);
-          writer_->Write(&handle, sizeof(uint64_t));
+          this->Write(handle);
           break;
         }
         case kArrayHandle: {
@@ -196,11 +212,11 @@ class RPCSession::EventHandler {
           TVMContext ctx = StripSessMask(arr->ctx);
           uint64_t data = reinterpret_cast<uint64_t>(
               static_cast<RemoteSpace*>(arr->data)->data);
-          writer_->Write(&data, sizeof(uint64_t));
-          writer_->Write(&ctx, sizeof(ctx));
-          writer_->Write(&(arr->ndim), sizeof(int));
-          writer_->Write(&(arr->dtype), sizeof(DLDataType));
-          writer_->Write(arr->shape, sizeof(int64_t) * arr->ndim);
+          this->Write(data);
+          this->Write(ctx);
+          this->Write(arr->ndim);
+          this->Write(arr->dtype);
+          this->WriteArray(arr->shape, arr->ndim);
           CHECK(arr->strides == nullptr)
               << "Donot support strided remote array";
           CHECK_EQ(arr->byte_offset, 0)
@@ -211,15 +227,15 @@ class RPCSession::EventHandler {
         case kStr: {
           const char* s = value.v_str;
           uint64_t len = strlen(s);
-          writer_->Write(&len, sizeof(len));
-          writer_->Write(s, sizeof(char) * len);
+          this->Write(len);
+          this->WriteArray(s, len);
           break;
         }
         case kBytes: {
           TVMByteArray* bytes = static_cast<TVMByteArray*>(arg_values[i].v_handle);
           uint64_t len = bytes->size;
-          writer_->Write(&len, sizeof(len));
-          writer_->Write(bytes->data, sizeof(char) * len);
+          this->Write(len);
+          this->WriteArray(bytes->data, len);
           break;
         }
         default: {
@@ -228,6 +244,23 @@ class RPCSession::EventHandler {
         }
       }
     }
+  }
+
+  // Endian aware IO handling
+  using Stream::Read;
+  using Stream::Write;
+  using Stream::ReadArray;
+  using Stream::WriteArray;
+
+  inline bool Read(RPCCode* code) {
+    int cdata;
+    if (!this->Read(&cdata)) return false;
+    *code = static_cast<RPCCode>(cdata);
+    return true;
+  }
+  inline void Write(RPCCode code) {
+    int cdata = static_cast<int>(code);
+    this->Write(cdata);
   }
 
  protected:
@@ -270,6 +303,7 @@ class RPCSession::EventHandler {
   std::string temp_data_;
   // Temp variables for copy request state.
   TVMContext copy_ctx_;
+  TVMType copy_dtype_;
   uint64_t copy_handle_, copy_offset_, copy_size_;
   // State switcher
   void SwitchToState(State state) {
@@ -311,11 +345,13 @@ class RPCSession::EventHandler {
       case kDoCopyFromRemote: {
         this->RequestBytes(sizeof(uint64_t) * 3);
         this->RequestBytes(sizeof(TVMContext));
+        this->RequestBytes(sizeof(TVMType));
         break;
       }
       case kDoCopyToRemote: {
         this->RequestBytes(sizeof(uint64_t) * 3);
         this->RequestBytes(sizeof(TVMContext));
+        this->RequestBytes(sizeof(TVMType));
         break;
       }
       case kCopyAckReceived:
@@ -370,10 +406,22 @@ class RPCSession::EventHandler {
       switch (tcode) {
         case kDLInt:
         case kDLUInt:
-        case kDLFloat:
-        case kTVMType:
+        case kDLFloat: {
+          this->Read<int64_t>(&(value.v_int64));
+          ++arg_index_;
+          this->SwitchToState(kRecvPackedSeqArg);
+          break;
+        }
+        case kTVMType: {
+          this->Read(&(value.v_type));
+          int32_t padding = 0;
+          this->Read<int32_t>(&padding);
+          ++arg_index_;
+          this->SwitchToState(kRecvPackedSeqArg);
+          break;
+        }
         case kTVMContext: {
-          this->Read(&value, sizeof(TVMValue));
+          this->Read(&(value.v_ctx));
           ++arg_index_;
           this->SwitchToState(kRecvPackedSeqArg);
           break;
@@ -383,7 +431,7 @@ class RPCSession::EventHandler {
         case kHandle: {
           // always send handle in 64 bit.
           uint64_t handle;
-          this->Read(&handle, sizeof(handle));
+          this->Read(&handle);
           value.v_handle = reinterpret_cast<void*>(handle);
           ++arg_index_;
           this->SwitchToState(kRecvPackedSeqArg);
@@ -398,7 +446,7 @@ class RPCSession::EventHandler {
         case kStr:
         case kBytes: {
           uint64_t len;
-          this->Read(&len, sizeof(len));
+          this->Read(&len);
           temp_bytes_.reset( new RPCByteArrayBuffer());
           temp_bytes_->data.resize(len);
           arg_recv_stage_ = 1;
@@ -409,12 +457,12 @@ class RPCSession::EventHandler {
       case kArrayHandle: {
         temp_array_.reset(new RPCDataArrayBuffer());
         uint64_t handle;
-        this->Read(&handle, sizeof(handle));
+        this->Read(&handle);
         DLTensor& tensor = temp_array_->tensor;
         tensor.data = reinterpret_cast<void*>(handle);
-        this->Read(&(tensor.ctx), sizeof(TVMContext));
-        this->Read(&(tensor.ndim), sizeof(int));
-        this->Read(&(tensor.dtype), sizeof(DLDataType));
+        this->Read(&(tensor.ctx));
+        this->Read(&(tensor.ndim));
+        this->Read(&(tensor.dtype));
         temp_array_->shape.resize(tensor.ndim);
         tensor.shape = temp_array_->shape.data();
         arg_recv_stage_ = 1;
@@ -432,7 +480,7 @@ class RPCSession::EventHandler {
       CHECK_EQ(arg_recv_stage_, 1);
       if (tcode == kStr || tcode == kBytes) {
         if (temp_bytes_->data.size() != 0) {
-          this->Read(&(temp_bytes_->data[0]), temp_bytes_->data.size());
+          this->ReadArray(&(temp_bytes_->data[0]), temp_bytes_->data.size());
         }
         if (tcode == kStr) {
           value.v_str = temp_bytes_->data.c_str();
@@ -445,7 +493,7 @@ class RPCSession::EventHandler {
       } else {
         CHECK_EQ(tcode, kArrayHandle);
         DLTensor& tensor = temp_array_->tensor;
-        this->Read(tensor.shape, tensor.ndim * sizeof(int64_t));
+        this->ReadArray(tensor.shape, tensor.ndim);
         value.v_handle = &tensor;
         arg_buf_->temp_array.emplace_back(std::move(temp_array_));
       }
@@ -458,20 +506,20 @@ class RPCSession::EventHandler {
   void HandleInitHeader() {
     if (init_header_step_ == 0) {
       int32_t len;
-      this->Read(&len, sizeof(len));
+      this->Read(&len);
       remote_key_->resize(len);
       init_header_step_ = 1;
       this->RequestBytes(len);
       return;
     } else {
       CHECK_EQ(init_header_step_, 1);
-      this->Read(dmlc::BeginPtr(*remote_key_), remote_key_->length());
+      this->ReadArray(dmlc::BeginPtr(*remote_key_), remote_key_->length());
       this->SwitchToState(kRecvCode);
     }
   }
   // Handler for read code.
   void HandleRecvCode() {
-    this->Read(&code_, sizeof(code_));
+    this->Read(&code_);
     if (code_ > RPCCode::kSystemFuncStart) {
       SwitchToState(kRecvPackedSeqNumArgs);
       return;
@@ -509,18 +557,30 @@ class RPCSession::EventHandler {
   }
 
   void HandleCopyFromRemote() {
-    uint64_t handle, offset, size;
+    uint64_t handle, offset, num_bytes;
     TVMContext ctx;
-    this->Read(&handle, sizeof(handle));
-    this->Read(&offset, sizeof(offset));
-    this->Read(&size, sizeof(size));
-    this->Read(&ctx, sizeof(ctx));
+    TVMType type_hint;
+    this->Read(&handle);
+    this->Read(&offset);
+    this->Read(&num_bytes);
+    this->Read(&ctx);
+    this->Read(&type_hint);
+    size_t elem_bytes = (type_hint.bits * type_hint.lanes + 7) / 8;
+
     if (ctx.device_type == kDLCPU) {
       RPCCode code = RPCCode::kCopyAck;
-      writer_->Write(&code, sizeof(code));
-      writer_->Write(reinterpret_cast<char*>(handle) + offset, size);
+      this->Write(code);
+      char* dptr = reinterpret_cast<char*>(handle) + offset;
+      if (!DMLC_IO_NO_ENDIAN_SWAP) {
+        temp_data_.resize(0);
+        temp_data_.insert(temp_data_.end(), dptr, dptr + num_bytes);
+        dmlc::ByteSwap(dmlc::BeginPtr(temp_data_), elem_bytes, num_bytes / elem_bytes);
+        this->WriteArray(temp_data_.data(), num_bytes);
+      } else {
+        this->WriteArray(dptr, num_bytes);
+      }
     } else {
-      temp_data_.resize(size + 1);
+      temp_data_.resize(num_bytes + 1);
       try {
         TVMContext cpu_ctx;
         cpu_ctx.device_type = kDLCPU;
@@ -528,13 +588,16 @@ class RPCSession::EventHandler {
         DeviceAPI::Get(ctx)->CopyDataFromTo(
             reinterpret_cast<void*>(handle), offset,
             dmlc::BeginPtr(temp_data_), 0,
-            size, ctx, cpu_ctx, nullptr);
+            num_bytes, ctx, cpu_ctx, type_hint, nullptr);
         RPCCode code = RPCCode::kCopyAck;
-        writer_->Write(&code, sizeof(code));
-        writer_->Write(&temp_data_[0], size);
+        this->Write(code);
+        if (!DMLC_IO_NO_ENDIAN_SWAP) {
+          dmlc::ByteSwap(dmlc::BeginPtr(temp_data_), elem_bytes, num_bytes / elem_bytes);
+        }
+        this->WriteArray(&temp_data_[0], num_bytes);
       } catch (const std::runtime_error &e) {
         RPCCode code = RPCCode::kException;
-        writer_->Write(&code, sizeof(code));
+        this->Write(code);
         TVMValue ret_value;
         ret_value.v_str = e.what();
         int ret_tcode = kStr;
@@ -548,10 +611,11 @@ class RPCSession::EventHandler {
     // use static variable to persist state.
     // This only works if next stage is immediately after this.
     if (arg_recv_stage_ == 0) {
-      this->Read(&copy_handle_, sizeof(uint64_t));
-      this->Read(&copy_offset_, sizeof(uint64_t));
-      this->Read(&copy_size_, sizeof(uint64_t));
-      this->Read(&copy_ctx_, sizeof(TVMContext));
+      CHECK(this->Read(&copy_handle_));
+      CHECK(this->Read(&copy_offset_));
+      CHECK(this->Read(&copy_size_));
+      CHECK(this->Read(&copy_ctx_));
+      CHECK(this->Read(&copy_dtype_));
       arg_recv_stage_ = 1;
       CHECK_EQ(pending_request_bytes_, 0U);
       this->RequestBytes(copy_size_);
@@ -562,12 +626,20 @@ class RPCSession::EventHandler {
       int ret_tcode = kNull;
       RPCCode code = RPCCode::kReturn;
       std::string errmsg;
+
+      size_t elem_bytes = (copy_dtype_.bits * copy_dtype_.lanes + 7) / 8;
       if (copy_ctx_.device_type == kDLCPU) {
-        this->Read(
-            reinterpret_cast<char*>(copy_handle_) + copy_offset_, copy_size_);
+        char* dptr = reinterpret_cast<char*>(copy_handle_) + copy_offset_;
+        this->ReadArray(dptr, copy_size_);
+        if (!DMLC_IO_NO_ENDIAN_SWAP) {
+          dmlc::ByteSwap(dptr, elem_bytes, copy_size_ / elem_bytes);
+        }
       } else {
         temp_data_.resize(copy_size_ + 1);
-        this->Read(&temp_data_[0], copy_size_);
+        this->ReadArray(&temp_data_[0], copy_size_);
+        if (!DMLC_IO_NO_ENDIAN_SWAP) {
+          dmlc::ByteSwap(dmlc::BeginPtr(temp_data_), elem_bytes, copy_size_ / elem_bytes);
+        }
         try {
           TVMContext cpu_ctx;
           cpu_ctx.device_type = kDLCPU;
@@ -575,7 +647,7 @@ class RPCSession::EventHandler {
           DeviceAPI::Get(copy_ctx_)->CopyDataFromTo(
               temp_data_.data(), 0,
               reinterpret_cast<void*>(copy_handle_), copy_offset_,
-              copy_size_, cpu_ctx, copy_ctx_, nullptr);
+              copy_size_, cpu_ctx, copy_ctx_, copy_dtype_, nullptr);
         } catch (const std::runtime_error &e) {
           code = RPCCode::kException;
           errmsg = e.what();
@@ -583,7 +655,7 @@ class RPCSession::EventHandler {
           ret_tcode = kStr;
         }
       }
-      writer_->Write(&code, sizeof(code));
+      this->Write(code);
       SendPackedSeq(&ret_value, &ret_tcode, 1);
       arg_recv_stage_ = 0;
       this->SwitchToState(kRecvCode);
@@ -603,7 +675,7 @@ class RPCSession::EventHandler {
       std::unique_ptr<RPCArgBuffer> args = std::move(arg_buf_);
       f(args->AsTVMArgs(), &rv);
       RPCCode code = RPCCode::kReturn;
-      writer_->Write(&code, sizeof(code));
+      this->Write(code);
       if (rv.type_code() == kStr) {
         ret_value.v_str = rv.ptr<std::string>()->c_str();
         ret_tcode = kStr;
@@ -630,7 +702,7 @@ class RPCSession::EventHandler {
       }
     } catch (const std::runtime_error& e) {
       RPCCode code = RPCCode::kException;
-      writer_->Write(&code, sizeof(code));
+      this->Write(code);
       ret_value.v_str = e.what();
       ret_tcode = kStr;
       SendPackedSeq(&ret_value, &ret_tcode, 1);
@@ -640,19 +712,14 @@ class RPCSession::EventHandler {
  private:
   // Utility functions
   // Internal read function, update pending_request_bytes_
-  void Read(void* data, size_t size) {
+  size_t Read(void* data, size_t size) final {
     CHECK_LE(size, pending_request_bytes_);
     reader_->Read(data, size);
     pending_request_bytes_ -= size;
+    return size;
   }
-  // Request number of bytes from reader.
-  void RequestBytes(size_t nbytes) {
-    pending_request_bytes_ += nbytes;
-    reader_->Reserve(pending_request_bytes_);
-  }
-  // Whether we are ready to handle next request.
-  bool Ready() {
-    return reader_->bytes_available() >= pending_request_bytes_;
+  void Write(const void* data, size_t size) final {
+    writer_->Write(data, size);
   }
   // Number of pending bytes requests
   size_t pending_request_bytes_;
@@ -766,7 +833,7 @@ RPCSession::~RPCSession() {
 void RPCSession::Shutdown() {
   if (channel_ != nullptr) {
     RPCCode code = RPCCode::kShutdown;
-    writer_.Write(&code, sizeof(code));
+    handler_->Write(code);
     // flush all writing buffer to output channel.
     try {
       while (writer_.bytes_available() != 0) {
@@ -788,7 +855,6 @@ void RPCSession::ServerLoop() {
   }
   TVMRetValue rv;
   CHECK(HandleUntilReturnEvent(&rv, false, nullptr) == RPCCode::kShutdown);
-  LOG(INFO) << "Shutdown...";
   if (const auto* f = Registry::Get("tvm.contrib.rpc.server.shutdown")) {
     (*f)();
   }
@@ -821,9 +887,9 @@ void RPCSession::CallFunc(void* h,
                           const PackedFunc* fwrap) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   RPCCode code = RPCCode::kCallFunc;
-  writer_.Write(&code, sizeof(code));
+  handler_->Write(code);
   uint64_t handle = reinterpret_cast<uint64_t>(h);
-  writer_.Write(&handle, sizeof(handle));
+  handler_->Write(handle);
   handler_->SendPackedSeq(args.values, args.type_codes, args.num_args);
   code = HandleUntilReturnEvent(rv, true, fwrap);
   CHECK(code == RPCCode::kReturn) << "code=" << static_cast<int>(code);
@@ -834,19 +900,21 @@ void RPCSession::CopyToRemote(void* from,
                               void* to,
                               size_t to_offset,
                               size_t data_size,
-                              TVMContext ctx_to) {
+                              TVMContext ctx_to,
+                              TVMType type_hint) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ctx_to = handler_->StripSessMask(ctx_to);
   RPCCode code = RPCCode::kCopyToRemote;
-  writer_.Write(&code, sizeof(code));
+  handler_->Write(code);
   uint64_t handle = reinterpret_cast<uint64_t>(to);
-  writer_.Write(&handle, sizeof(handle));
+  handler_->Write(handle);
   uint64_t offset = static_cast<uint64_t>(to_offset);
-  writer_.Write(&offset, sizeof(offset));
+  handler_->Write(offset);
   uint64_t size = static_cast<uint64_t>(data_size);
-  writer_.Write(&size, sizeof(size));
-  writer_.Write(&ctx_to, sizeof(ctx_to));
-  writer_.Write(reinterpret_cast<char*>(from) + from_offset, data_size);
+  handler_->Write(size);
+  handler_->Write(ctx_to);
+  handler_->Write(type_hint);
+  handler_->WriteArray(reinterpret_cast<char*>(from) + from_offset, data_size);
   TVMRetValue rv;
   CHECK(HandleUntilReturnEvent(&rv, true, nullptr) == RPCCode::kReturn);
 }
@@ -856,30 +924,33 @@ void RPCSession::CopyFromRemote(void* from,
                                 void* to,
                                 size_t to_offset,
                                 size_t data_size,
-                                TVMContext ctx_from) {
+                                TVMContext ctx_from,
+                                TVMType type_hint) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ctx_from = handler_->StripSessMask(ctx_from);
   RPCCode code = RPCCode::kCopyFromRemote;
-  writer_.Write(&code, sizeof(code));
+  handler_->Write(code);
   uint64_t handle = reinterpret_cast<uint64_t>(from);
-  writer_.Write(&handle, sizeof(handle));
+  handler_->Write(handle);
   uint64_t offset = static_cast<uint64_t>(from_offset);
-  writer_.Write(&offset, sizeof(offset));
+  handler_->Write(offset);
   uint64_t size = static_cast<uint64_t>(data_size);
-  writer_.Write(&size, sizeof(size));
-  writer_.Write(&ctx_from, sizeof(ctx_from));
+  handler_->Write(size);
+  handler_->Write(ctx_from);
+  handler_->Write(type_hint);
   TVMRetValue rv;
   CHECK(HandleUntilReturnEvent(&rv, true, nullptr) == RPCCode::kCopyAck);
   reader_.Reserve(data_size);
-  while (reader_.bytes_available() < data_size) {
-    size_t bytes_needed = data_size - reader_.bytes_available();
+  handler_->RequestBytes(data_size);
+  while (!handler_->Ready()) {
+    size_t bytes_needed = handler_->BytesNeeded();
     reader_.WriteWithCallback([this](void* data, size_t size) {
         size_t n = channel_->Recv(data, size);
         CHECK_NE(n, 0U) << "Channel closes before we get neded bytes";
         return n;
       }, bytes_needed);
   }
-  reader_.Read(reinterpret_cast<char*>(to) + to_offset, data_size);
+  handler_->ReadArray(reinterpret_cast<char*>(to) + to_offset, data_size);
   handler_->FinishCopyAck();
 }
 
@@ -956,7 +1027,8 @@ void RPCCopyAmongRemote(TVMArgs args, TVMRetValue *rv) {
   uint64_t size = args[4];
   TVMContext ctx_from = args[5];
   TVMContext ctx_to = args[6];
-  TVMStreamHandle stream = args[7];
+  TVMType type_hint = args[7];
+  TVMStreamHandle stream = args[8];
   TVMContext ctx = ctx_from;
   if (ctx.device_type == kDLCPU) {
     ctx = ctx_to;
@@ -968,7 +1040,7 @@ void RPCCopyAmongRemote(TVMArgs args, TVMRetValue *rv) {
   DeviceAPI::Get(ctx)->CopyDataFromTo(
       from, from_offset,
       to, to_offset,
-      size, ctx_from, ctx_to, stream);
+      size, ctx_from, ctx_to, type_hint, stream);
 }
 
 void RPCModuleLoad(TVMArgs args, TVMRetValue *rv) {
