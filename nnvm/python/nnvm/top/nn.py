@@ -105,7 +105,7 @@ def compute_conv2d(attrs, inputs, _):
         bias = inputs[2]
         expand_axis = 1 if layout == "NCHW" else 0
         bias = topi.expand_dims(bias, axis=expand_axis, num_newaxis=2)
-        out = topi.broadcast_add(out, bias)
+        out = topi.add(out, bias)
     return out
 
 @reg.register_schedule("conv2d")
@@ -146,7 +146,7 @@ def compute_contrib_conv2d_NCHWc(attrs, inputs, _):
     if attrs.get_bool("use_bias"):
         bias = inputs[2]
         bias = topi.expand_dims(bias, axis=1, num_newaxis=2)
-        out = topi.broadcast_add(out, bias)
+        out = topi.add(out, bias)
     return out
 
 @reg.register_schedule("_contrib_conv2d_NCHWc")
@@ -181,7 +181,7 @@ def compute_conv2d_transpose(attrs, inputs, _):
     if attrs.get_bool("use_bias"):
         bias = inputs[2]
         bias = topi.expand_dims(bias, axis=1, num_newaxis=2)
-        out = topi.broadcast_add(out, bias)
+        out = topi.add(out, bias)
     output_padding = attrs.get_int_tuple("output_padding")
     out = topi.nn.pad(out, \
         [0, 0, 0, 0], [0, 0, output_padding[0], output_padding[1]])
@@ -243,3 +243,36 @@ def schedule_upsampling(_, outs, target):
         return topi.generic.schedule_injective(outs)
 
 reg.register_pattern("upsampling", OpPattern.INJECTIVE)
+
+@reg.register_compute("lrn")
+def compute_lrn(attrs, inputs, _):
+    """Compute definition of lrn"""
+    size = attrs.get_int("size")
+    axis = attrs.get_int("axis")
+    alpha = attrs.get_float("alpha")
+    beta = attrs.get_float("beta")
+    bias = attrs.get_float("bias")
+    return topi.nn.lrn(inputs[0], size, axis, alpha, beta, bias)
+
+@reg.register_schedule("lrn")
+def schedule_lrn(attrs, outs, target):
+    """Schedule definition of lrn"""
+    with tvm.target.create(target):
+        return topi.generic.schedule_lrn(outs)
+
+reg.register_pattern("lrn", OpPattern.OPAQUE)
+
+@reg.register_compute("l2_normalize")
+def compute_l2_normalize(attrs, inputs, _):
+    """Compute definition of l2 normalize"""
+    eps = attrs.get_float("eps")
+    axis = attrs.get_int_tuple("axis")
+    return topi.nn.l2_normalize(inputs[0], eps, axis)
+
+@reg.register_schedule("l2_normalize")
+def schedule_l2_normalize(attrs, outs, target):
+    """Schedule definition of l2 normalize"""
+    with tvm.target.create(target):
+        return topi.generic.schedule_l2_normalize(outs)
+
+reg.register_pattern("l2_normalize", OpPattern.OUT_ELEMWISE_FUSABLE)
