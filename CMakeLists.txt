@@ -48,11 +48,8 @@ tvm_option(USE_RANDOM "Build with random support" OFF)
 
 # include directories
 include_directories("include")
-include_directories("nnvm/include")
-include_directories("dmlc-core/include")
-include_directories("HalideIR/src")
 include_directories("dlpack/include")
-include_directories("topi/include")
+include_directories("dmlc-core/include")
 
 # initial variables
 set(TVM_LINKER_LIBS "")
@@ -169,6 +166,19 @@ target_link_libraries(tvm_topi tvm ${TVM_LINKER_LIBS} ${TVM_RUNTIME_LINKER_LIBS}
 target_link_libraries(tvm_runtime ${TVM_RUNTIME_LINKER_LIBS})
 target_link_libraries(nnvm_compiler tvm)
 
+# Related headers
+target_include_directories(
+  tvm
+  PUBLIC "HalideIR/src"
+  PUBLIC "topi/include")
+target_include_directories(
+  tvm_topi
+  PUBLIC "topi/include")
+target_include_directories(
+  nnvm_compiler
+  PUBLIC "nnvm/include"
+  PUBLIC "topi/include")
+
 # Tests
 set(TEST_EXECS "")
 file(GLOB TEST_SRCS tests/cpp/*.cc)
@@ -191,17 +201,13 @@ endif()
 # Custom targets
 add_custom_target(runtime DEPENDS tvm_runtime)
 
-# Installation rulse
+# Installation rules
+install(TARGETS tvm DESTINATION lib${LIB_SUFFIX})
+install(TARGETS tvm_topi DESTINATION lib${LIB_SUFFIX})
 install(TARGETS tvm_runtime DESTINATION lib${LIB_SUFFIX})
-if(WIN32)
-  install(TARGETS nnvm_compiler RUNTIME DESTINATION bin)
-  install(TARGETS nnvm_compiler ARCHIVE DESTINATION lib)
-else()
-  install(TARGETS nnvm_compiler LIBRARY DESTINATION lib)
-endif()
+install(TARGETS nnvm_compiler DESTINATION lib${LIB_SUFFIX})
 
 if (INSTALL_DEV)
-  install(TARGETS tvm DESTINATION lib${LIB_SUFFIX})
   install(
     DIRECTORY "include/." DESTINATION "include"
     FILES_MATCHING
