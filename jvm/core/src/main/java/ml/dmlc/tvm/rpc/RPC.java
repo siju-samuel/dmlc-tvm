@@ -32,6 +32,7 @@ public class RPC {
 
   public class TrackerCode {
     public static final int PUT = 3;
+    public static final int UPDATE_INFO = 5;
     public static final int GET_PENDING_MATCHKEYS = 7;
     public static final int SUCCESS = 0;
   }
@@ -44,6 +45,11 @@ public class RPC {
           }
         };
 
+  /**
+   * Get internal function starts with namespace tvm.rpc.
+   * @param name function name.
+   * @return the function, null if not exists.
+   */
   static Function getApi(String name) {
     Function func = apiFuncs.get().get(name);
     if (func == null) {
