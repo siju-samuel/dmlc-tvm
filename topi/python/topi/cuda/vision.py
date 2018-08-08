@@ -11,6 +11,11 @@ def _default_schedule(outs):
     target = tvm.target.current_target()
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def traverse(op):
         """inline all one-to-one-mapping operators except the last stage (output)"""
         if "nms" in op.tag:
@@ -32,9 +37,17 @@ def _default_schedule(outs):
                 s[x].bind(bx, tvm.thread_axis("blockIdx.x"))
                 s[x].bind(tx, tvm.thread_axis("threadIdx.x"))
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
                     traverse(tensor.op)
 
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+                    traverse(tensor.op)
+
+        scheduled_ops.append(op)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s
 

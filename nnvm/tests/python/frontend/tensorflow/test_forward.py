@@ -12,6 +12,10 @@ import tensorflow as tf
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import graph_util
 from tensorflow.python.ops import nn_ops
+<<<<<<< HEAD
+=======
+from tensorflow.python.ops import nn
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
@@ -404,6 +408,40 @@ def test_forward_sigmoid():
 
     _test_sigmoid(np.random.uniform(size=(3, 4, 4, 3)).astype('float32'))
 
+<<<<<<< HEAD
+=======
+#######################################################################
+# Argmin/Argmax
+# -------------
+
+def _test_argx(func, data, **kwargs):
+
+    with tf.Graph().as_default():
+        inp = constant_op.constant(data, shape=data.shape, dtype=data.dtype, name="c0")
+
+        # pylint: disable=unused-variable
+        out = func(inp, name="argx0", **kwargs)
+        # pylint: enable=unused-variable
+
+        with tf.Session() as sess:
+            graph_def = tf.graph_util.convert_variables_to_constants(
+                sess=sess,
+                input_graph_def=sess.graph.as_graph_def(add_shapes=True),
+                output_node_names=["argx0"])
+
+            tf_output = run_tf_graph(sess, data, input_node="c0:0", output_node="argx0:0")
+            tvm_output = run_tvm_graph(graph_def, data, "c0", tf_output.shape, output_dtype='int32')
+
+            np.testing.assert_allclose(tf_output, tvm_output, atol=1e-5, rtol=1e-5)
+
+            sess.close()
+
+def test_argmin_argmax():
+    for axis in [None,0,1,2]:
+        data = np.random.uniform(size=(8,4,9)).astype('float32')
+        _test_argx(tf.argmax, data=data, axis=axis)
+        _test_argx(tf.argmin, data=data, axis=axis)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 #######################################################################
 # Variable
@@ -673,6 +711,48 @@ def test_forward_resize_bilinear():
     _test_resize_bilinear((4, 16, 32, 32), [50, 50], False)
     _test_resize_bilinear((6, 32, 64, 64), [20, 20], True)
 
+<<<<<<< HEAD
+=======
+#######################################################################
+# Pad
+# ---
+def _test_pad(input_shape, paddings, mode, **kwargs):
+    """ One iteration of pad operation with given shape"""
+
+    x = np.arange(np.prod(input_shape), dtype=np.float32).reshape(input_shape)
+
+    with tf.Graph().as_default():
+        in_data = constant_op.constant(x, shape=input_shape, dtype='float32')
+        pad_values = constant_op.constant(paddings)
+        pad = tf.pad(in_data, paddings=pad_values, mode=mode, **kwargs)
+
+        if mode == 'CONSTANT':
+            if 'constant_values' in kwargs:
+                out_node = 'PadV2'
+                out_name = 'PadV2:0'
+            else:
+                out_node = 'Pad'
+                out_name = 'Pad:0'
+
+        with tf.Session() as sess:
+            graph_def = tf.graph_util.convert_variables_to_constants(
+                sess,
+                sess.graph.as_graph_def(add_shapes=True),
+                [out_node],
+                )
+
+            tf_output = run_tf_graph(sess, x, 'Const:0', out_name)
+            tvm_output = run_tvm_graph(graph_def, x.astype('float32'),
+                                       "Const", tf_output.shape, 'float32')
+            np.testing.assert_allclose(tf_output, tvm_output)
+            sess.close()
+
+def test_forward_pad():
+    """ Pad """
+    _test_pad((2, 3), [[1,1], [2,2]], mode="CONSTANT")
+    _test_pad((2, 3), [[1,1], [2,2]], mode="CONSTANT", constant_values=1.0)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 #######################################################################
 # Inception V3
@@ -878,7 +958,10 @@ def _test_lrn(ishape, size, axis, bias, alpha, beta):
                 sess,
                 sess.graph.as_graph_def(add_shapes=True),
                 ['lrn'],)
+<<<<<<< HEAD
 
+=======
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             tf_output = run_tf_graph(sess, inp_array, 'lrn0_data:0', 'lrn:0')
             tvm_output = run_tvm_graph(graph_def,
                                        inp_array,
@@ -889,6 +972,45 @@ def _test_lrn(ishape, size, axis, bias, alpha, beta):
 def test_forward_lrn():
     _test_lrn((1, 3, 20, 20), 3, 1, 1.0, 1.0, 0.5)
 
+<<<<<<< HEAD
+=======
+#######################################################################
+# l2_normalize
+# ------------
+def _test_l2_normalize(ishape, eps, axis):
+    """ testing l2 normalize (uses max, sum, square, sqrt frontend operators)"""
+
+    inp_array = np.random.uniform(size=ishape).astype(np.float32)
+    inp_array.fill(1)
+
+    with tf.Graph().as_default():
+        in1 = tf.placeholder(shape=inp_array.shape, dtype=inp_array.dtype, name="Placeholder")
+        nn.l2_normalize(in1,
+                        axis=axis,
+                        epsilon=eps,
+                        name=None,
+                        dim=None)
+
+        with tf.Session() as sess:
+            graph_def = tf.graph_util.convert_variables_to_constants(
+                sess,
+                sess.graph.as_graph_def(add_shapes=True),
+                ['l2_normalize'],
+                )
+            tf_output = run_tf_graph(sess, inp_array, 'Placeholder:0', 'Placeholder:0')
+            tvm_output = run_tvm_graph(graph_def,
+                                       inp_array,
+                                       "Placeholder",
+                                       tf_output.shape,
+                                       tf_output.dtype)
+
+            np.testing.assert_allclose(tf_output, tvm_output, atol=1e-3, rtol=1e-3)
+            sess.close()
+def test_forward_l2_normalize():
+    _test_l2_normalize((1, 3, 20, 20), 0.001, (0,))
+
+#######################################################################
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 # Main
 # ----
 if __name__ == '__main__':
@@ -905,8 +1027,16 @@ if __name__ == '__main__':
     test_forward_mobilenet()
     test_forward_variable()
     test_forward_resize_bilinear()
+<<<<<<< HEAD
+=======
+    test_forward_pad()    
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     test_forward_lstm()
     test_forward_stridedslice()
     test_forward_gather()
     test_forward_ptb()
     test_forward_lrn()
+<<<<<<< HEAD
+=======
+    test_forward_l2_normalize()
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581

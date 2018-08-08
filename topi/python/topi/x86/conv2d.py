@@ -188,6 +188,10 @@ def schedule_conv2d(outs):
     }
     s = tvm.create_schedule([x.op for x in outs])
     target = tvm.target.current_target(allow_none=False)
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     def traverse(op):
         """Traverse operators from computation graph"""
@@ -196,7 +200,11 @@ def schedule_conv2d(outs):
             if op not in s.outputs:
                 s[op].compute_inline()
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
 
         if 'conv2d_nchw' in op.tag:
@@ -223,6 +231,11 @@ def schedule_conv2d(outs):
             _AVX_SCH_TO_SCH_FUNC[type(sch)](s, data, data_pad, data_vec,
                                             kernel, kernel_vec, conv_out, output, outs[0])
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(op)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s
 
@@ -232,6 +245,10 @@ def schedule_conv2d_nhwc(outs):
     """Create schedule for tensors"""
     s = tvm.create_schedule([x.op for x in outs])
     output_op = outs[0].op
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     def traverse(op):
         """Traverse operators from computation graph"""
@@ -246,7 +263,11 @@ def schedule_conv2d_nhwc(outs):
                     s[op].parallel(fused)
                     s[op].vectorize(c)
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
 
         if 'conv2d_nhwc' in op.tag:
@@ -275,6 +296,11 @@ def schedule_conv2d_nhwc(outs):
                 fused = s[C].fuse(n, h, w)
                 s[C].parallel(fused)
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(op)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(output_op)
     return s
 
@@ -288,6 +314,10 @@ def schedule_conv2d_NCHWc(num_filter, kernel_size, stride, padding,
         AVXConv1x1Fwd: conv2d_avx_1x1._schedule_conv_NCHWc
     }
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     def traverse(op):
         """Traverse operators from computation graph"""
@@ -296,7 +326,11 @@ def schedule_conv2d_NCHWc(num_filter, kernel_size, stride, padding,
             if op not in s.outputs:
                 s[op].compute_inline()
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
 
         if 'conv2d_NCHWc' in op.tag:
@@ -322,5 +356,10 @@ def schedule_conv2d_NCHWc(num_filter, kernel_size, stride, padding,
             _AVX_SCH_TO_SCH_FUNC[type(sch)](s, wkl, sch, data_vec,
                                             kernel, conv_out, outs[0])
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(op)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s

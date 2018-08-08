@@ -27,7 +27,11 @@ to see the results.
 #
 # .. code-block:: bash
 #
+<<<<<<< HEAD
 #   pip3 install --user psutil xgboost
+=======
+#   pip3 install --user psutil xgboost tornado
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 #
 # To make tvm run faster in tuning, it is recommended to use cython
 # as FFI of tvm. In the root directory of tvm, execute
@@ -163,8 +167,15 @@ def get_network(name, batch_size):
 # Set Tuning Options
 # ------------------
 # Before tuning, we should do some configurations. Here I use an RK3399 board
+<<<<<<< HEAD
 # in our environment as example. In your setting, you should modify the target
 # and device_key accordingly.
+=======
+# as example. In your setting, you should modify the target and device_key accordingly.
+# set :code:`use_android` to True if you use android phone.
+
+#### DEVICE CONFIG ####
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 # Replace "aarch64-linux-gnu" with the correct target of your board.
 # This target is used for cross compilation. You can query it by :code:`gcc -v` on your device.
@@ -173,7 +184,14 @@ target = tvm.target.create('llvm -device=arm_cpu -target=aarch64-linux-gnu')
 # Also replace this with the device key in your tracker
 device_key = 'rk3399'
 
+<<<<<<< HEAD
 # tuning option
+=======
+# Set this to True if you use android phone
+use_android = False
+
+#### TUNING OPTION ####
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 network = 'resnet-18'
 log_file = "%s.%s.log" % (device_key, network)
 dtype = 'float32'
@@ -181,17 +199,29 @@ dtype = 'float32'
 tuning_option = {
    'log_filename': log_file,
 
+<<<<<<< HEAD
    'tuner':'xgb',
    'n_trial': 1000,
    'early_stopping': 200,
+=======
+   'tuner': 'xgb',
+   'n_trial': 1000,
+   'early_stopping': 250,
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
    'measure_option': autotvm.measure_option(
        autotvm.use_rpc(device_key, host='localhost', port=9190),
        number=4,
        parallel_num=1,
+<<<<<<< HEAD
        timeout=10),
 
    'use_transfer_learning': True,
+=======
+       timeout=10,
+       build_func='ndk' if use_android else 'default',
+   ),
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 }
 
 ####################################################################
@@ -208,9 +238,12 @@ tuning_option = {
 #   If your device is very slow or a single conv2d operator in your network has large FLOPs,
 #   consider setting timeout larger.
 #
+<<<<<<< HEAD
 #   **For android phone**, add :code:`build_func='ndk'` to the argument list of
 #   :code:`autotvm.measure_option` to use Android NDK for creating shared library.
 #
+=======
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 ###################################################################
 # Begin Tuning
@@ -280,12 +313,20 @@ def tune_tasks(tasks,
 
 def tune_and_evaluate():
     # extract workloads from nnvm graph
+<<<<<<< HEAD
+=======
+    print("Extract tasks...")
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     net, params, shape, out_shape = get_network(network, batch_size=1)
     tasks = autotvm.task.extract_from_graph(net, shape=shape, dtype=dtype,
                                             symbols=(nnvm.sym.conv2d,),
                                             target=target)
 
     # run tuning tasks
+<<<<<<< HEAD
+=======
+    print("Tuning...")
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     tune_tasks(tasks, **tuning_option)
 
     # compile kernels with history best records
@@ -325,10 +366,18 @@ def tune_and_evaluate():
         ftimer = module.module.time_evaluator("run", ctx, number=1, repeat=10)
         prof_res = np.array(ftimer().results) * 1000 # convert to millisecond
         print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
+<<<<<<< HEAD
                 (np.mean(prof_res), np.std(prof_res)))
 
 # We do not run the tuning in our webpage server since it takes too long.
 # Uncomment the following line to run by yourself.
+=======
+              (np.mean(prof_res), np.std(prof_res)))
+
+# We do not run the tuning in our webpage server since it takes too long.
+# Uncomment the following line to run by yourself.
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 # tune_and_evaluate()
 
 ######################################################################
@@ -341,6 +390,11 @@ def tune_and_evaluate():
 #
 # .. code-block:: bash
 #
+<<<<<<< HEAD
+=======
+#    Extract tasks...
+#    Tuning...
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 #    [Task  1/16]  Current/Best:   13.15/  20.49 GFLOPS | Progress: (297/1000) | 348.51 s Done.
 #    [Task  2/16]  Current/Best:   16.66/  22.64 GFLOPS | Progress: (475/1000) | 415.42 s Done.
 #    [Task  3/16]  Current/Best:   10.33/  14.19 GFLOPS | Progress: (306/1000) | 239.61 s Done.
@@ -362,3 +416,26 @@ def tune_and_evaluate():
 #    Evaluate inference time cost...
 #    Mean inference time (std dev): 156.51 ms (0.89 ms)
 #
+<<<<<<< HEAD
+=======
+
+
+######################################################################
+#
+# .. note:: **Meet some problems?**
+#
+#   The auto tuning module is error prone. If you always see " 0.00/ 0.00 GFLOPS",
+#   then there must be something wrong.
+#
+#   First, make sure you set the correct configuration of your device.
+#   Then, you can print debug information by adding these lines in the beginning
+#   of the script. It will print every measurement result, where you can find useful
+#   error messages.
+#
+#   .. code-block:: python
+#
+#      import logging
+#      logging.getLogger('autotvm').setLevel(logging.DEBUG)
+#
+#   Finally, always feel free to ask our community for help on https://discuss.tvm.ai
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581

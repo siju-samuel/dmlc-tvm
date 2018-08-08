@@ -199,7 +199,11 @@ Adding more stages has a cost however: it can add storage and extra logic overhe
 
 .. _vta-uarch:
 Microarchitectural Overview
+<<<<<<< HEAD
 ----------------------
+=======
+---------------------------
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 We describe the modules that compose the VTA design.
 The module definitions are contained in ``vta/hardware/xilinx/sources/vta.cc``.

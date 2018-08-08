@@ -10,6 +10,11 @@ of the DispatchContext base class.
 - During search, we can use it to pass the current proposal from tuner.
 - During evaluation, we can use it to set pick the best policy.
 """
+<<<<<<< HEAD
+=======
+# pylint: disable=invalid-name
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 from __future__ import absolute_import as _abs
 
 import logging
@@ -19,6 +24,11 @@ import numpy as np
 
 from tvm import target as _target
 
+<<<<<<< HEAD
+=======
+logger = logging.getLogger('autotvm')
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 class DispatchContext(object):
     """
     Base class of dispatch context.
@@ -216,7 +226,11 @@ class ApplyHistoryBest(DispatchContext):
                             best_by_model[key] = (inp, res)
                     break
 
+<<<<<<< HEAD
         logging.debug("Finish loading %d records", counter)
+=======
+        logger.debug("Finish loading %d records", counter)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     def query(self, target, workload):
         if target is None:

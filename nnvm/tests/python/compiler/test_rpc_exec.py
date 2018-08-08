@@ -4,12 +4,22 @@ from tvm.contrib import util, graph_runtime
 import nnvm.symbol as sym
 import nnvm.compiler
 import numpy as np
+<<<<<<< HEAD
 
 def test_rpc_executor():
     host = "localhost"
     port = 9100
     server = rpc.Server(host, port, use_popen=True)
 
+=======
+import time
+
+def test_rpc_executor():
+    host = "localhost"
+    port = 9021
+    server = rpc.Server(host, port, use_popen=True)
+    time.sleep(1)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     x = sym.Variable("x")
     y = sym.Variable("y")
     z = sym.exp(y + x)

@@ -327,6 +327,11 @@ def _schedule_spatial_conv2d_nhwc(s, data, data_q, data_pad, data_vec,
 def schedule_bitserial_conv2d_nhwc(outs):
     """Raspverry pi schedule for bitserial conv2d"""
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def traverse(op):
         """Traverse operators from computation graph"""
         # inline all one-to-one-mapping operators except the last stage (output)
@@ -334,7 +339,11 @@ def schedule_bitserial_conv2d_nhwc(outs):
             if op not in s.outputs:
                 s[op].compute_inline()
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
 
         if 'spatial_bitserial_conv_nhwc' in op.tag:
@@ -360,6 +369,10 @@ def schedule_bitserial_conv2d_nhwc(outs):
 
             _schedule_spatial_conv2d_nhwc(s, data, data_q, data_pad, data_vec,
                                           kernel, kernel_q, kernel_vec, conv_out, output, outs[0])
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(op)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     traverse(outs[0].op)
     return s

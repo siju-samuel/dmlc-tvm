@@ -9,6 +9,10 @@ import logging
 import os
 import time
 from random import getrandbits
+<<<<<<< HEAD
+=======
+import threading
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 import numpy as np
 
@@ -23,6 +27,10 @@ from ..task.space import InstantiationError
 from .measure import MeasureResult, MeasureErrorNo
 from .local_executor import LocalExecutor
 
+<<<<<<< HEAD
+=======
+logger = logging.getLogger('autotvm')
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 class HashMismatchError(ValueError):
     """Raised when the code hash of a submitted config doesn't match that on the
@@ -42,9 +50,15 @@ def request_remote(device_key, tracker_addr=None, priority=1, timeout=60):
         If is none, will use environment variable "TVM_TRACKER_HOST"
         and "TVM_TRACKER_PORT"
     priority: int, optional
+<<<<<<< HEAD
         priority of this request, larger is more prior
     timeout: float, optional
         timeout of this session (units: seconds)
+=======
+        The priority of this request, larger is more prior
+    timeout: float, optional
+        The timeout of this session (units: seconds)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     Returns
     ------
@@ -63,6 +77,36 @@ def request_remote(device_key, tracker_addr=None, priority=1, timeout=60):
                              session_timeout=timeout)
     return remote
 
+<<<<<<< HEAD
+=======
+def check_remote(target, device_key, tracker_addr=None, priority=2, timeout=10):
+    """
+    Check the availability of a remote device
+
+    Parameters
+    ----------
+    target: Target
+        The wanted compilation target
+    device_key: string
+        device key of registered device in tracker
+    tracker_addr: Tuple(string, int), optional
+        The address of rpc tracker in (host, port) format.
+        If is none, will use environment variable "TVM_TRACKER_HOST"
+        and "TVM_TRACKER_PORT"
+    priority: int, optional
+        The priority of this request, larger is more prior
+    timeout: float, optional
+        The timeout of this check (units: seconds).
+        If time is out, a RuntimerError will be raised.
+    """
+    def _check():
+        remote = request_remote(device_key, tracker_addr, priority)
+        remote.context(str(target))
+    t = threading.Thread(target=_check,)
+    t.start()
+    t.join(timeout)
+    return not t.is_alive()
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 def create_measure_batch(task, option):
     """Get a standard measure_batch function.
@@ -95,12 +139,24 @@ def create_measure_batch(task, option):
     attach_objects = None
     if measure_func == 'local':
         # start temporary rpc tracker and rpc server for the user
+<<<<<<< HEAD
         tracker = rpc.Tracker('localhost', port=9000, port_end=10000, silent=True)
         device_key = '$local$device$%d' % tracker.port
         server = rpc.Server('localhost', port=9000, port_end=10000,
                             key=device_key,
                             use_popen=True, silent=True,
                             tracker_addr=(tracker.host, tracker.port))
+=======
+        from ...rpc.tracker import Tracker
+        from ...rpc.server import Server
+
+        tracker = Tracker('localhost', port=9000, port_end=10000, silent=True)
+        device_key = '$local$device$%d' % tracker.port
+        server = Server('localhost', port=9000, port_end=10000,
+                        key=device_key,
+                        use_popen=True, silent=True,
+                        tracker_addr=(tracker.host, tracker.port))
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
         measure_func = use_rpc(device_key, tracker.host, tracker.port)
         attach_objects = (server, tracker)
@@ -112,6 +168,20 @@ def create_measure_batch(task, option):
         build_func = default_build_func
         build_kwargs['use_ndk'] = True
 
+<<<<<<< HEAD
+=======
+    # check the availability of remote devices
+    if hasattr(measure_func, 'rpc_info'):
+        rpc_info = measure_func.rpc_info
+        if check_remote(task.target, rpc_info['key'], (rpc_info['host'], rpc_info['port'])):
+            logger.info("Get devices for measurement successfully!")
+        else:
+            raise RuntimeError("Cannot get remote devices from the tracker. "
+                               "Please check the status of tracker by "
+                               "'python -m tvm.exec.query_rpc_tracker --port [THE PORT YOU USE]' "
+                               "and make sure you have free devices on the queue status.")
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     # add device info of cuda and opencl target
     if ('cuda' in task.target.keys or 'opencl' in task.target.keys) \
             and hasattr(measure_func, 'rpc_info'):
@@ -310,7 +380,11 @@ def _measure_common(input_pack, build_func, build_kwargs, number, repeat,
             continue
         except InstantiationError as e:
             tstamp = time.time()
+<<<<<<< HEAD
             res_pack.append(MeasureResult((e,),
+=======
+            res_pack.append(MeasureResult((InstantiationError(str(e)),),
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                                           MeasureErrorNo.INSTANTIATION_ERROR,
                                           tstamp - tic, tstamp))
             continue
@@ -343,7 +417,11 @@ def _measure_common(input_pack, build_func, build_kwargs, number, repeat,
             if ref_output:
                 for expected, real in zip(ref_output, args):
                     if not np.allclose(expected, real.asnumpy(), rtol=1e-4):
+<<<<<<< HEAD
                         logging.warning("Wrong Answer!")
+=======
+                        logger.warning("Wrong Answer!")
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                         errno = MeasureErrorNo.WRONG_ANSWER
         except TVMError as exc:
             msg = str(exc)

@@ -4,6 +4,10 @@ To get the best performance, we typically need auto-tuning for the specific devi
 TVM releases pre-tuned parameters in TopHub for some common networks and hardware targets.
 TVM will download these parameters for you when you create the target for the first time.
 """
+<<<<<<< HEAD
+=======
+# pylint: disable=invalid-name
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 import logging
 import os
@@ -16,6 +20,10 @@ from ..contrib.download import download
 
 AUTOTVM_TOPHUB_ROOT_PATH = os.path.join(os.path.expanduser('~'), ".tvm", "tophub")
 
+<<<<<<< HEAD
+=======
+logger = logging.getLogger('autotvm')
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 def _alias(name):
     """convert alias for some packages"""
@@ -79,7 +87,11 @@ def download_package(backend):
                 os.mkdir(path)
 
     backend = _alias(backend)
+<<<<<<< HEAD
     logging.info("Download pre-tuned parameters for %s", backend)
+=======
+    logger.info("Download pre-tuned parameters for %s", backend)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     download("https://raw.githubusercontent.com/uwsaml/tvm-distro/master/tophub/%s.log" % backend,
              os.path.join(rootpath, backend + ".log"), True, verbose=0)
 
@@ -110,7 +122,11 @@ def list_packages():
     """
     path = tempdir()
     filename = path.relpath("info.json")
+<<<<<<< HEAD
     logging.info("Download meta info for pre-tuned parameters")
+=======
+    logger.info("Download meta info for pre-tuned parameters")
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     download("https://raw.githubusercontent.com/uwsaml/tvm-distro/master/tophub/info.json",
              filename, True, verbose=0)
 

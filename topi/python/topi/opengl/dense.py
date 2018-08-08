@@ -22,6 +22,11 @@ def schedule_dense(outs):
     """
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def _schedule(Dense):
         if Dense.op in s.outputs:
             Out = Dense
@@ -37,7 +42,11 @@ def schedule_dense(outs):
             if OP not in s.outputs:
                 s[OP].compute_inline()
             for tensor in OP.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
         # schedule dense
         elif OP.tag == 'dense':
@@ -46,5 +55,10 @@ def schedule_dense(outs):
         else:
             raise RuntimeError("Unsupported operator: %s" % OP.tag)
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(OP)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s

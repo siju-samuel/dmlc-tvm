@@ -21,6 +21,11 @@ def schedule_global_pool(outs):
     """
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def _schedule(Pool):
         if Pool.op in s.outputs:
             Out = Pool
@@ -36,7 +41,11 @@ def schedule_global_pool(outs):
             if OP not in s.outputs:
                 s[OP].opengl()
             for tensor in OP.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
         # schedule global_pool
         elif OP.tag.startswith('global_pool'):
@@ -45,6 +54,11 @@ def schedule_global_pool(outs):
         else:
             raise RuntimeError("Unsupported operator: %s" % OP.tag)
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(OP)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s
 
@@ -66,6 +80,11 @@ def schedule_pool(outs):
     """
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def _schedule(PaddedInput, Pool):
         if isinstance(PaddedInput.op, tvm.tensor.ComputeOp):
             s[PaddedInput].opengl()
@@ -82,7 +101,11 @@ def schedule_pool(outs):
         if tag.is_broadcast(OP.tag):
             if OP not in s.outputs:
                 s[OP].compute_inline()
+<<<<<<< HEAD
             for tensor in OP.input_tensors:
+=======
+            for tensor in OP.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                 if tensor.op.input_tensors:
                     traverse(tensor.op)
         # schedule pool
@@ -93,5 +116,10 @@ def schedule_pool(outs):
         else:
             raise RuntimeError("Unsupported operator: %s" % OP.tag)
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(OP)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s

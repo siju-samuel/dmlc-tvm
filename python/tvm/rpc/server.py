@@ -8,6 +8,11 @@ Server is TCP based with the following protocol:
 - The key is in format
    - {server|client}:device-type[:random-key] [-timeout=timeout]
 """
+<<<<<<< HEAD
+=======
+# pylint: disable=invalid-name
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 from __future__ import absolute_import
 
 import os
@@ -30,11 +35,19 @@ from ..contrib import util
 from . import base
 from . base import TrackerCode
 
+<<<<<<< HEAD
 def _server_env(load_library, logger):
     """Server environment function return temp dir"""
     temp = util.tempdir()
     if logger is None:
         logger = logging.getLogger()
+=======
+logger = logging.getLogger('RPCServer')
+
+def _server_env(load_library):
+    """Server environment function return temp dir"""
+    temp = util.tempdir()
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     # pylint: disable=unused-variable
     @register_func("tvm.rpc.server.workpath")
@@ -59,6 +72,7 @@ def _server_env(load_library, logger):
     return temp
 
 
+<<<<<<< HEAD
 def _serve_loop(sock, addr, load_library, silent):
     """Server loop"""
     logger = logging.getLogger("RPCServer")
@@ -66,6 +80,12 @@ def _serve_loop(sock, addr, load_library, silent):
         logger.disabled = True
     sockfd = sock.fileno()
     temp = _server_env(load_library, logger)
+=======
+def _serve_loop(sock, addr, load_library):
+    """Server loop"""
+    sockfd = sock.fileno()
+    temp = _server_env(load_library)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     base._ServerLoop(sockfd)
     temp.remove()
     logger.info("Finish serving %s", addr)
@@ -79,12 +99,17 @@ def _parse_server_opt(opts):
             ret["timeout"] = float(kv[9:])
     return ret
 
+<<<<<<< HEAD
 def _listen_loop(sock, port, rpc_key, tracker_addr, load_library, custom_addr, silent):
     """Listening loop of the server master."""
     logger = logging.getLogger("RPCServer")
     if silent:
         logger.disabled = True
 
+=======
+def _listen_loop(sock, port, rpc_key, tracker_addr, load_library, custom_addr):
+    """Listening loop of the server master."""
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def _accept_conn(listen_sock, tracker_conn, ping_period=2):
         """Accept connection from the other places.
 
@@ -148,7 +173,11 @@ def _listen_loop(sock, port, rpc_key, tracker_addr, load_library, custom_addr, s
             if arr[0] != expect_header:
                 conn.sendall(struct.pack("<i", base.RPC_CODE_MISMATCH))
                 conn.close()
+<<<<<<< HEAD
                 logger.info("mismatch key from %s", addr)
+=======
+                logger.warning("mismatch key from %s", addr)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                 continue
             else:
                 conn.sendall(struct.pack("<i", base.RPC_CODE_SUCCESS))
@@ -162,7 +191,11 @@ def _listen_loop(sock, port, rpc_key, tracker_addr, load_library, custom_addr, s
         try:
             # step 1: setup tracker and report to tracker
             if tracker_addr and tracker_conn is None:
+<<<<<<< HEAD
                 tracker_conn = base.connect_with_retry(tracker_addr, silent=silent)
+=======
+                tracker_conn = base.connect_with_retry(tracker_addr)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                 tracker_conn.sendall(struct.pack("<i", base.RPC_TRACKER_MAGIC))
                 magic = struct.unpack("<i", base.recvall(tracker_conn, 4))[0]
                 if magic != base.RPC_TRACKER_MAGIC:
@@ -182,15 +215,23 @@ def _listen_loop(sock, port, rpc_key, tracker_addr, load_library, custom_addr, s
                 tracker_conn = None
             continue
         except RuntimeError as exc:
+<<<<<<< HEAD
             if silent:
                 return
             else:
                 raise exc
+=======
+            raise exc
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
         # step 3: serving
         logger.info("connection from %s", addr)
         server_proc = multiprocessing.Process(target=_serve_loop,
+<<<<<<< HEAD
                                               args=(conn, addr, load_library, silent))
+=======
+                                              args=(conn, addr, load_library))
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
         server_proc.deamon = True
         server_proc.start()
         # close from our side.
@@ -202,10 +243,14 @@ def _listen_loop(sock, port, rpc_key, tracker_addr, load_library, custom_addr, s
             server_proc.terminate()
 
 
+<<<<<<< HEAD
 def _connect_proxy_loop(addr, key, load_library, silent):
     logger = logging.getLogger("RPCProxy")
     if silent:
         logger.disabled = True
+=======
+def _connect_proxy_loop(addr, key, load_library):
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     key = "server:" + key
     retry_count = 0
     max_retry = 5
@@ -221,7 +266,11 @@ def _connect_proxy_loop(addr, key, load_library, silent):
             if magic == base.RPC_CODE_DUPLICATE:
                 raise RuntimeError("key: %s has already been used in proxy" % key)
             elif magic == base.RPC_CODE_MISMATCH:
+<<<<<<< HEAD
                 logger.info("RPCProxy do not have matching client key %s", key)
+=======
+                logger.warning("RPCProxy do not have matching client key %s", key)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             elif magic != base.RPC_CODE_SUCCESS:
                 raise RuntimeError("%s is not RPC Proxy" % str(addr))
             keylen = struct.unpack("<i", base.recvall(sock, 4))[0]
@@ -229,7 +278,11 @@ def _connect_proxy_loop(addr, key, load_library, silent):
             opts = _parse_server_opt(remote_key.split()[1:])
             logger.info("connected to %s", str(addr))
             process = multiprocessing.Process(
+<<<<<<< HEAD
                 target=_serve_loop, args=(sock, addr, load_library, silent))
+=======
+                target=_serve_loop, args=(sock, addr, load_library))
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             process.deamon = True
             process.start()
             sock.close()
@@ -240,7 +293,11 @@ def _connect_proxy_loop(addr, key, load_library, silent):
             retry_count = 0
         except (socket.error, IOError) as err:
             retry_count += 1
+<<<<<<< HEAD
             logger.info("Error encountered %s, retry in %g sec", str(err), retry_period)
+=======
+            logger.warning("Error encountered %s, retry in %g sec", str(err), retry_period)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             if retry_count > max_retry:
                 raise RuntimeError("Maximum retry error: last error: %s" % str(err))
             time.sleep(retry_period)
@@ -323,9 +380,14 @@ class Server(object):
         self.custom_addr = custom_addr
         self.use_popen = use_popen
 
+<<<<<<< HEAD
         self.logger = logging.getLogger("RPCServer")
         if silent:
             self.logger.disabled = True
+=======
+        if silent:
+            logger.setLevel(logging.WARN)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
         if use_popen:
             cmd = [sys.executable,
@@ -360,18 +422,30 @@ class Server(object):
                         raise sock_err
             if not self.port:
                 raise ValueError("cannot bind to any port in [%d, %d)" % (port, port_end))
+<<<<<<< HEAD
             self.logger.info("bind to %s:%d", host, self.port)
+=======
+            logger.info("bind to %s:%d", host, self.port)
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             sock.listen(1)
             self.sock = sock
             self.proc = multiprocessing.Process(
                 target=_listen_loop, args=(
                     self.sock, self.port, key, tracker_addr, load_library,
+<<<<<<< HEAD
                     self.custom_addr, silent))
+=======
+                    self.custom_addr))
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             self.proc.deamon = True
             self.proc.start()
         else:
             self.proc = multiprocessing.Process(
+<<<<<<< HEAD
                 target=_connect_proxy_loop, args=((host, port), key, load_library, silent))
+=======
+                target=_connect_proxy_loop, args=((host, port), key, load_library))
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             self.proc.deamon = True
             self.proc.start()
 

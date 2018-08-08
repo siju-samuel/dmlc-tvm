@@ -16,7 +16,11 @@ vendor provided library CuDNN in many cases.
 #
 # .. code-block:: bash
 #
+<<<<<<< HEAD
 #   pip3 install --user psutil xgboost
+=======
+#   pip3 install --user psutil xgboost tornado
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 #
 # To make tvm run faster in tuning, it is recommended to use cython
 # as FFI of tvm. In the root directory of tvm, execute
@@ -154,7 +158,12 @@ def conv2d_no_batching(N, H, W, CI, CO, KH, KW, stride, padding):
 # for this template
 
 # logging config (for printing tuning log to screen)
+<<<<<<< HEAD
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+=======
+logging.getLogger('autotvm').setLevel(logging.DEBUG)
+logging.getLogger('autotvm').addHandler(logging.StreamHandler(sys.stdout))
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 # the last layer in resnet
 N, H, W, CO, CI, KH, KW, strides, padding = 1, 7, 7, 512, 512, 3, 3, (1, 1), (1, 1)

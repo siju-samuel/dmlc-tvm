@@ -113,6 +113,10 @@ def schedule_conv2d_NCHWc(num_filter, kernel_size, stride, padding, layout, out_
     """
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     def traverse(op):
         """inline all one-to-one-mapping operators except the last stage (output)"""
@@ -120,12 +124,21 @@ def schedule_conv2d_NCHWc(num_filter, kernel_size, stride, padding, layout, out_
             if op not in s.outputs:
                 s[op].compute_inline()
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
         if "4_5" in op.tag or "4_4" in op.tag or "2_7" in op.tag or "2_14" in op.tag \
            or "1_16" in op.tag:
             _schedule_cl_spatialpack_NCHWc(s, op)
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(op)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
 
     return s
@@ -360,6 +373,10 @@ def schedule_conv2d_nchw(outs):
     """
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
+<<<<<<< HEAD
+=======
+    scheduled_ops = []
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     def traverse(op):
         """inline all one-to-one-mapping operators except the last stage (output)"""
@@ -367,12 +384,21 @@ def schedule_conv2d_nchw(outs):
             if op not in s.outputs:
                 s[op].compute_inline()
             for tensor in op.input_tensors:
+<<<<<<< HEAD
                 if tensor.op.input_tensors:
+=======
+                if tensor.op.input_tensors and tensor.op not in scheduled_ops:
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
         if "4_5" in op.tag or "4_4" in op.tag or "2_7" in op.tag or "2_14" in op.tag \
            or "1_16" in op.tag:
             _schedule_cl_spatialpack(s, op)
 
+<<<<<<< HEAD
+=======
+        scheduled_ops.append(op)
+
+>>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s
 
