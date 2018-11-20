@@ -9,8 +9,8 @@
 #include <atomic>
 #include <vector>
 #include <utility>
-#include "./c_runtime_api.h"
-#include "./serializer.h"
+#include "c_runtime_api.h"
+#include "serializer.h"
 
 namespace tvm {
 namespace runtime {
@@ -30,8 +30,11 @@ class NDArray {
    */
   explicit inline NDArray(Container* data);
   /*!
-   * \brief copy constructor
-   * \param other The value to be copied
+   * \brief copy constructor.
+   *
+   * It does not make a copy, but the reference count of the input NDArray is incremented
+   *
+   * \param other NDArray that shares internal data with the input NDArray.
    */
   inline NDArray(const NDArray& other);  // NOLINT(*)
   /*!
@@ -155,7 +158,7 @@ class NDArray {
    * that is DLPack compatible.
    *
    * The memory is retained until the NDArray went out of scope.
-   *
+   * \param tensor The DLPack tensor to copy from.
    * \return The created NDArray view.
    */
   TVM_DLL static NDArray FromDLPack(DLManagedTensor* tensor);
@@ -246,6 +249,7 @@ struct NDArray::Container {
 
  private:
   friend class NDArray;
+  friend class RPCWrappedFunc;
   /*!
    * \brief The shape container,
    *  can be used used for shape data.
@@ -259,12 +263,16 @@ struct NDArray::Container {
 // the usages of functions are documented in place.
 inline NDArray::NDArray(Container* data)
   : data_(data) {
-  data_->IncRef();
+  if (data != nullptr) {
+    data_->IncRef();
+  }
 }
 
 inline NDArray::NDArray(const NDArray& other)
   : data_(other.data_) {
-  data_->IncRef();
+  if (data_ != nullptr) {
+    data_->IncRef();
+  }
 }
 
 inline void NDArray::reset() {
@@ -272,6 +280,21 @@ inline void NDArray::reset() {
     data_->DecRef();
     data_ = nullptr;
   }
+}
+
+/*! \brief return the size of data the DLTensor hold, in term of number of bytes
+ *
+ *  \param arr the input DLTensor
+ *
+ *  \return number of  bytes of data in the DLTensor.
+ */
+inline size_t GetDataSize(const DLTensor& arr) {
+  size_t size = 1;
+  for (tvm_index_t i = 0; i < arr.ndim; ++i) {
+    size *= static_cast<size_t>(arr.shape[i]);
+  }
+  size *= (arr.dtype.bits * arr.dtype.lanes + 7) / 8;
+  return size;
 }
 
 inline void NDArray::CopyFrom(DLTensor* other) {

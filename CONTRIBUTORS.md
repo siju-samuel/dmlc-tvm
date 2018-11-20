@@ -18,25 +18,30 @@ See the [community structure document](http://docs.tvm.ai/contribute/community.h
 - [Yuwei Hu](https://github.com/Huyuwei) TOPI
 - [Zhixun Tan](https://github.com/phisiart) OpenGL/WebGL backend
 - [Nick Hynes](https://github.com/nhynes) SGX and secured computing
+- [Lianmin Zheng](https://github.com/merrymercy) AutoTVM
 
 ## Reviewers
+- [Zhi Chen](https://github.com/zhiics)
+- [Xiaoqiang Dan](https://github.com/xqdan)
+- [Liangfu Chen](https://github.com/liangfu)
+- [Wuwei Lin](https://github.com/vinx13)
 - [Masahiro Masuda](https://github.com/masahi)
 - [Kazutaka Morita](https://github.com/kazum)
+- [Tatsuya Nishiyama](https://github.com/nishi-t)
 - [Pariksheet Pinjari](https://github.com/PariksheetPinjari909)
+- [Jared Roesch](https://github.com/jroesch)
 - [Siva](https://github.com/srkreddy1238)
+- [Siju Samuel](https://github.com/siju-samuel)
 - [Alex Weaver](https://github.com/alex-weaver)
+- [Yao Wang](https://github.com/kevinthesun)
+- [Jian Weng](https://github.com/were)
 - [Eddie Yan](https://github.com/eqy)
 - [Joshua Z. Zhang](https://github.com/zhreshold)
-- [Lianmin Zheng](https://github.com/merrymercy)
 
 ## List of Contributors
 - [Full List of Contributors](https://github.com/dmlc/tvm/graphs/contributors)
   - To contributors: please add your name to the list.
 - [Qiao Zhang](https://github.com/zhangqiaorjc)
-- [Jian Weng](https://github.com/were)
-- [Masahiro Masuda](https://github.com/masahi)
 - [Haolong Zhang](https://github.com/haolongzhangm)
 - [Cody Hao Yu](https://github.com/comaniac)
 - [Chris Nuernberger](https://github.com/cnuernber)
-- [Tatsuya Nishiyama](https://github.com/nishi-t)
-- [Kazutaka Morita](https://github.com/kazum)

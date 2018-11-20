@@ -7,7 +7,7 @@
 #include <tvm/ir_mutator.h>
 #include <tvm/ir_pass.h>
 #include <unordered_set>
-#include "./ir_util.h"
+#include "ir_util.h"
 #include "../arithmetic/compute_expr.h"
 
 namespace tvm {
@@ -288,7 +288,7 @@ class BuiltinLower : public IRMutator {
 };
 
 LoweredFunc LowerTVMBuiltin(LoweredFunc f) {
-  auto n = std::make_shared<LoweredFuncNode>(*f.operator->());
+  auto n = make_node<LoweredFuncNode>(*f.operator->());
   n->body = BuiltinLower().Build(n->body);
   return LoweredFunc(n);
 }

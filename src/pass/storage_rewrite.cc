@@ -12,7 +12,7 @@
 #include <map>
 #include <unordered_set>
 #include <unordered_map>
-#include "./ir_util.h"
+#include "ir_util.h"
 #include "../arithmetic/compute_expr.h"
 #include "../runtime/thread_storage_scope.h"
 
@@ -578,12 +578,18 @@ class StoragePlanRewriter : public IRMutator {
           combo_size = combo_size / type_bits;
           // round up for can not divided
           if (!divided) {
-             combo_size += make_const(Int(32), 1);
+             combo_size = combo_size + make_const(Int(32), 1);
           }
           combo_size = ir::Simplify(combo_size);
           e->new_alloc = Allocate::make(
               e->alloc_var, alloc_type, {combo_size}, const_true(),
               Evaluate::make(0));
+          if (e->scope.tag.length() != 0) {
+            MemoryInfo info = GetMemoryInfo(e->scope.to_string());
+            uint64_t total_elem = e->const_nbits / e->elem_type.bits();
+            CHECK_LE(total_elem * e->elem_type.bits(), info->max_num_bits)
+                << "Allocation exceed bound of memory tag " << e->scope.to_string();
+          }
         }
       }
     }
@@ -944,8 +950,7 @@ class VectorAllocRewriter : public IRMutator {
 
 
 LoweredFunc PointerValueTypeRewrite(LoweredFunc f) {
-  std::shared_ptr<LoweredFuncNode> n =
-      std::make_shared<LoweredFuncNode>(*f.operator->());
+  auto n = make_node<LoweredFuncNode>(*f.operator->());
   VectorAllocRewriter rewriter;
   n->body = rewriter.Mutate(n->body);
   for (Var arg : f->args) {

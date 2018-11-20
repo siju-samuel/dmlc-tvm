@@ -2,11 +2,7 @@
 ==============================================
 
 [![GitHub license](https://dmlc.github.io/img/apache2.svg)](./LICENSE)
-<<<<<<< HEAD
-[![Build Status](http://mode-gpu.cs.washington.edu:8080/buildStatus/icon?job=tvm/master)](http://mode-gpu.cs.washington.edu:8080/job/tvm/job/master/)
-=======
 [![Build Status](http://ci.tvm.ai:8080/buildStatus/icon?job=tvm/master)](http://ci.tvm.ai:8080/job/tvm/job/master/)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 [Documentation](https://docs.tvm.ai) |
 [Contributors](CONTRIBUTORS.md) |
@@ -31,6 +27,6 @@ Acknowledgement
 ---------------
 We learnt a lot from the following projects when building TVM.
 - [Halide](https://github.com/halide/Halide): TVM uses [HalideIR](https://github.com/dmlc/HalideIR) as data structure for
-  arithematic simplification and low level lowering. We also learnt and adapted some part of lowering pipeline from Halide.
+  arithmetic simplification and low level lowering. We also learnt and adapted some part of lowering pipeline from Halide.
 - [Loopy](https://github.com/inducer/loopy): use of integer set analysis and its loop transformation primitives.
 - [Theano](https://github.com/Theano/Theano): the design inspiration of symbolic scan operator for recurrence.

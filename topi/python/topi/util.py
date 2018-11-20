@@ -1,39 +1,23 @@
 # pylint: disable=invalid-name
 """Common topi utilities"""
 from __future__ import absolute_import as _abs
-import tvm
+from numbers import Integral
 
+import tvm
 from . import tag
 
-<<<<<<< HEAD
-def traverse_inline(s, op, callback):
-=======
 def traverse_inline(s, final_op, callback):
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     """Traverse computation graph and do auto inline
 
     Parameters
     ----------
     s: schedule
         The schedule
-<<<<<<< HEAD
-    op: Operation
-=======
     final_op: Operation
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
         The final output operator.
     callback: callable
         The callback function on each op
     """
-<<<<<<< HEAD
-    if tag.is_injective(op.tag):
-        if op not in s.outputs:
-            s[op].compute_inline()
-        for tensor in op.input_tensors:
-            if tensor.op.input_tensors:
-                traverse_inline(s, tensor.op, callback)
-    callback(op)
-=======
     visited = set()
 
     def _traverse(op):
@@ -49,7 +33,6 @@ def traverse_inline(s, final_op, callback):
         callback(op)
 
     _traverse(final_op)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 
 def prod(x):
@@ -86,13 +69,13 @@ def get_const_int(expr):
     out_value : int
         The output.
     """
-    if isinstance(expr, int):
+    if isinstance(expr, Integral):
         return expr
     if not isinstance(expr, (tvm.expr.IntImm, tvm.expr.UIntImm)):
         expr = tvm.ir_pass.Simplify(expr)
     if not isinstance(expr, (tvm.expr.IntImm, tvm.expr.UIntImm)):
         raise ValueError("Expect value to be constant int")
-    return expr.value
+    return int(expr.value)
 
 
 def equal_const_int(expr, value):
@@ -108,7 +91,7 @@ def equal_const_int(expr, value):
     equal : bool
         Whether they equals.
     """
-    if isinstance(expr, int):
+    if isinstance(expr, Integral):
         return expr == value
     if not isinstance(expr, (tvm.expr.IntImm, tvm.expr.UIntImm)):
         expr = tvm.ir_pass.Simplify(expr)

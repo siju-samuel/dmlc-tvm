@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# pylint: disable=consider-using-enumerate
-=======
 # pylint: disable=consider-using-enumerate, invalid-name
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 """
 Cost model optimizer based on simulated annealing
 """
@@ -16,11 +12,8 @@ import numpy as np
 from ..util import sample_ints
 from .model_based_tuner import ModelOptimizer, knob2point, point2knob
 
-<<<<<<< HEAD
-=======
 logger = logging.getLogger('autotvm')
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 class SimulatedAnnealingOptimizer(ModelOptimizer):
     """parallel simulated annealing optimization algorithm
 
@@ -94,7 +87,7 @@ class SimulatedAnnealingOptimizer(ModelOptimizer):
 
             new_scores = model.predict(new_points)
 
-            ac_prob = np.exp((new_scores - scores) / t)
+            ac_prob = np.exp(np.minimum((new_scores - scores) / (t + 1e-5), 1))
             ac_index = np.random.random(len(ac_prob)) < ac_prob
 
             points[ac_index] = new_points[ac_index]
@@ -112,18 +105,6 @@ class SimulatedAnnealingOptimizer(ModelOptimizer):
 
             if log_interval and k % log_interval == 0:
                 t_str = "%.2f" % t
-<<<<<<< HEAD
-                logging.debug("SA iter: %d\tlast_update: %d\tmax-0: %.2f\tmax-1: %.2f\ttemp: %s\t"
-                              "elapsed: %.2f",
-                              k, k_last_modify, heap_items[0][0],
-                              np.max([v for v, _ in heap_items]), t_str,
-                              time.time() - tic)
-
-        heap_items.sort(key=lambda item: -item[0])
-        logging.debug("SA iter: %d\tlast_update: %d\tmax-0: %.2f\tmax-1: %.2f\telapsed: %.2f",
-                      k, k_last_modify, heap_items[-1][0], heap_items[0][0], time.time() - tic)
-        logging.debug("SA Maximums: %s", heap_items)
-=======
                 logger.debug("SA iter: %d\tlast_update: %d\tmax-0: %.2f\tmax-1: %.2f\ttemp: %s\t"
                              "elapsed: %.2f",
                              k, k_last_modify, heap_items[0][0],
@@ -134,7 +115,6 @@ class SimulatedAnnealingOptimizer(ModelOptimizer):
         logger.debug("SA iter: %d\tlast_update: %d\tmax-0: %.2f\tmax-1: %.2f\telapsed: %.2f",
                      k, k_last_modify, heap_items[-1][0], heap_items[0][0], time.time() - tic)
         logger.debug("SA Maximums: %s", heap_items)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
         if self.persistent:
             self.points = points

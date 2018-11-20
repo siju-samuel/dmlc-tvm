@@ -8,9 +8,9 @@ performance. This is a tutorial about how to tune a whole convolutional
 network.
 
 The operator implementation for ARM CPU in TVM is written in template form.
-It has many tunable knobs (tile factor, vectorization, unrolling, etc).
-We will do tuning for all convolution and depthwise convolution operators
-in the neural network. After the tuning, we can get a log file which stores
+The template has many tunable knobs (tile factor, vectorization, unrolling, etc).
+We will tune all convolution and depthwise convolution operators
+in the neural network. After tuning, we produce a log file which stores
 the best knob values for all required operators. When the tvm compiler compiles
 these operators, it will query this log file to get the best knob values.
 
@@ -21,19 +21,15 @@ to see the results.
 
 ######################################################################
 # Install dependencies
-# ----------------------------------------
-# To use autotvm package in tvm, we need to install some extra dependencies.
+# --------------------
+# To use the autotvm package in tvm, we need to install some extra dependencies.
 # (change "3" to "2" if you use python2):
 #
 # .. code-block:: bash
 #
-<<<<<<< HEAD
-#   pip3 install --user psutil xgboost
-=======
 #   pip3 install --user psutil xgboost tornado
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 #
-# To make tvm run faster in tuning, it is recommended to use cython
+# To make tvm run faster during tuning, it is recommended to use cython
 # as FFI of tvm. In the root directory of tvm, execute
 # (change "3" to "2" if you use python2):
 #
@@ -66,18 +62,23 @@ import tvm.contrib.graph_runtime as runtime
 
 def get_network(name, batch_size):
     """Get the symbol definition and random weight of a network"""
-    shape = {"data": (batch_size, 3, 224, 224)}
+    input_shape = (batch_size, 3, 224, 224)
     output_shape = (batch_size, 1000)
 
-    if name =='resnet-18':
-        net, params = nnvm.testing.resnet.get_workload(num_layers=18, batch_size=batch_size)
-    elif name =='mobilenet':
+    if "resnet" in name:
+        n_layer = int(name.split('-')[1])
+        net, params = nnvm.testing.resnet.get_workload(num_layers=n_layer, batch_size=batch_size)
+    elif "vgg" in name:
+        n_layer = int(name.split('-')[1])
+        net, params = nnvm.testing.vgg.get_workload(num_layers=n_layer, batch_size=batch_size)
+    elif name == 'mobilenet':
         net, params = nnvm.testing.mobilenet.get_workload(batch_size=batch_size)
-    elif name =='squeezenet v1.1':
+    elif name == 'squeezenet_v1.1':
         net, params = nnvm.testing.squeezenet.get_workload(batch_size=batch_size, version='1.1')
-    elif name =='vgg-16':
-        net, params = nnvm.testing.vgg.get_workload(num_layers=16, batch_size=batch_size)
-    elif name =='custom':
+    elif name == 'inception_v3':
+        input_shape = (1, 3, 299, 299)
+        net, params = nnvm.testing.inception_v3.get_workload(batch_size=batch_size)
+    elif name == 'custom':
         # an example for custom network
         from nnvm.testing import utils
         net = nnvm.sym.Variable('data')
@@ -94,7 +95,8 @@ def get_network(name, batch_size):
     else:
         raise ValueError("Unsupported network: " + name)
 
-    return net, params, shape, output_shape
+    return net, params, input_shape, output_shape
+
 
 #################################################################
 # Start RPC Tracker
@@ -106,10 +108,9 @@ def get_network(name, batch_size):
 # To scale up the tuning, TVM uses RPC Tracker to manage distributed devices.
 # The RPC Tracker is a centralized master node. We can register all devices to
 # the tracker. For example, if we have 10 phones, we can register all of them
-# to the tracker, then we can run 10 measurements in parallel, which accelerates
-# the tuning process.
+# to the tracker, and run 10 measurements in parallel, accelerating the tuning process.
 #
-# To start an RPC tracker, run this command in the host machine. The tracker is
+# To start an RPC tracker, run this command on the host machine. The tracker is
 # required during the whole tuning process, so we need to open a new terminal for
 # this command:
 #
@@ -142,6 +143,8 @@ def get_network(name, batch_size):
 # * For Android:
 #   Follow this `readme page <https://github.com/dmlc/tvm/tree/master/apps/android_rpc>`_ to
 #   install tvm rpc apk on the android device. Make sure you can pass the android rpc test.
+#   Then you have already registred your device. During tuning, you have to go to developer option
+#   and enable "Keep screen awake during changing" and charge your phone to make it stable.
 #
 # After registering devices, we can confirm it by querying rpc_tracker
 #
@@ -155,27 +158,24 @@ def get_network(name, batch_size):
 # .. code-block:: bash
 #
 #    Queue Status
-#    ----------------------------
-#    key          free    pending
-#    ----------------------------
-#    mate10pro    2       0
-#    rk3399       2       0
-#    rpi3b        11      0
-#    ----------------------------
+#    ----------------------------------
+#    key          total  free  pending
+#    ----------------------------------
+#    mate10pro    2      2     0
+#    rk3399       2      2     0
+#    rpi3b        11     11    0
+#    ----------------------------------
+#
+# You can register multiple devices to the tracker to accelerate the measurement in tuning.
 
 ###########################################
 # Set Tuning Options
 # ------------------
-# Before tuning, we should do some configurations. Here I use an RK3399 board
-<<<<<<< HEAD
-# in our environment as example. In your setting, you should modify the target
-# and device_key accordingly.
-=======
+# Before tuning, we should apply some configurations. Here I use an RK3399 board
 # as example. In your setting, you should modify the target and device_key accordingly.
 # set :code:`use_android` to True if you use android phone.
 
 #### DEVICE CONFIG ####
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 # Replace "aarch64-linux-gnu" with the correct target of your board.
 # This target is used for cross compilation. You can query it by :code:`gcc -v` on your device.
@@ -184,81 +184,57 @@ target = tvm.target.create('llvm -device=arm_cpu -target=aarch64-linux-gnu')
 # Also replace this with the device key in your tracker
 device_key = 'rk3399'
 
-<<<<<<< HEAD
-# tuning option
-=======
 # Set this to True if you use android phone
 use_android = False
 
 #### TUNING OPTION ####
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 network = 'resnet-18'
 log_file = "%s.%s.log" % (device_key, network)
 dtype = 'float32'
 
 tuning_option = {
-   'log_filename': log_file,
+    'log_filename': log_file,
 
-<<<<<<< HEAD
-   'tuner':'xgb',
-   'n_trial': 1000,
-   'early_stopping': 200,
-=======
-   'tuner': 'xgb',
-   'n_trial': 1000,
-   'early_stopping': 250,
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
+    'tuner': 'xgb',
+    'n_trial': 1000,
+    'early_stopping': 400,
 
-   'measure_option': autotvm.measure_option(
-       autotvm.use_rpc(device_key, host='localhost', port=9190),
-       number=4,
-       parallel_num=1,
-<<<<<<< HEAD
-       timeout=10),
-
-   'use_transfer_learning': True,
-=======
-       timeout=10,
-       build_func='ndk' if use_android else 'default',
-   ),
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
+    'measure_option': autotvm.measure_option(
+        builder=autotvm.LocalBuilder(
+            build_func='ndk' if use_android else 'default'),
+        runner=autotvm.RPCRunner(
+            device_key, host='localhost', port=9190,
+            number=5,
+            timeout=4,
+        ),
+    ),
 }
 
 ####################################################################
 #
 # .. note:: How to set tuning options
 #
-#   In general, the default value provided here works well. It is the same
-#   value that we used to generate pre-tuned parameters.
-#   If you have multiple devices, you can set :code:`parallel_num` to
-#   the number of devices you have. (e.g. set it to 3 if you register 3 rk3399
-#   boards to the tracker).
-#   If you have large time budget, you can set :code:`n_trial`, :code:`early_stopping` larger,
+#   In general, the default values provided here work well.
+#   If you have enough time budget, you can set :code:`n_trial`, :code:`early_stopping` larger,
 #   which makes the tuning run longer.
-#   If your device is very slow or a single conv2d operator in your network has large FLOPs,
-#   consider setting timeout larger.
+#   If your device runs very slow or your conv2d operators have many GFLOPs, considering to
+#   set timeout larger.
 #
-<<<<<<< HEAD
-#   **For android phone**, add :code:`build_func='ndk'` to the argument list of
-#   :code:`autotvm.measure_option` to use Android NDK for creating shared library.
-#
-=======
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 ###################################################################
 # Begin Tuning
 # ------------
 # Now we can extract tuning tasks from the network and begin tuning.
-# Here we provide a simple utility function to tune a list of tasks.
-# This function is just an initial implementation which tune them in sequential order.
-# Later we will bring more sophisticated tuner scheduler.
+# Here, we provide a simple utility function to tune a list of tasks.
+# This function is just an initial implementation which tunes them in sequential order.
+# We will introduce a more sophisticated tuning scheduler in the future.
 
 # You can skip the implementation of this function for this tutorial.
 def tune_tasks(tasks,
                measure_option,
                tuner='xgb',
-               n_trial=500,
-               early_stopping=200,
+               n_trial=1000,
+               early_stopping=None,
                log_filename='tuning.log',
                use_transfer_learning=True,
                try_winograd=True):
@@ -267,7 +243,9 @@ def tune_tasks(tasks,
             try:  # try winograd template
                 tsk = autotvm.task.create(tasks[i].name, tasks[i].args,
                                           tasks[i].target, tasks[i].target_host, 'winograd')
-                tasks.append(tsk)
+                input_channel = tsk.workload[1][1]
+                if input_channel >= 64:
+                    tasks[i] = tsk
             except Exception:
                 pass
 
@@ -276,8 +254,8 @@ def tune_tasks(tasks,
     if os.path.exists(tmp_log_file):
         os.remove(tmp_log_file)
 
-    for i, tsk in enumerate(tasks):
-        prefix = "[Task %2d/%2d] " %(i+1, len(tasks))
+    for i, tsk in enumerate(reversed(tasks)):
+        prefix = "[Task %2d/%2d] " % (i+1, len(tasks))
 
         # create tuner
         if tuner == 'xgb' or tuner == 'xgb-rank':
@@ -309,37 +287,30 @@ def tune_tasks(tasks,
 
 
 ########################################################################
-# Finally we launch tuning jobs and evaluate the end-to-end performance.
+# Finally, we launch tuning jobs and evaluate the end-to-end performance.
 
-def tune_and_evaluate():
+def tune_and_evaluate(tuning_opt):
     # extract workloads from nnvm graph
-<<<<<<< HEAD
-=======
     print("Extract tasks...")
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
-    net, params, shape, out_shape = get_network(network, batch_size=1)
-    tasks = autotvm.task.extract_from_graph(net, shape=shape, dtype=dtype,
-                                            symbols=(nnvm.sym.conv2d,),
-                                            target=target)
+    net, params, input_shape, out_shape = get_network(network, batch_size=1)
+    tasks = autotvm.task.extract_from_graph(net, target=target,
+                                            shape={'data': input_shape}, dtype=dtype,
+                                            symbols=(nnvm.sym.conv2d,))
 
     # run tuning tasks
-<<<<<<< HEAD
-=======
     print("Tuning...")
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
-    tune_tasks(tasks, **tuning_option)
+    tune_tasks(tasks, **tuning_opt)
 
     # compile kernels with history best records
     with autotvm.apply_history_best(log_file):
         print("Compile...")
-        with nnvm.compiler.build_config(opt_level=2, add_pass=['AlterOpLayout']):
+        with nnvm.compiler.build_config(opt_level=3):
             graph, lib, params = nnvm.compiler.build(
-                net, target=target,
-                shape=shape, params=params, dtype=dtype)
+                net, target=target, shape={'data': input_shape}, params=params, dtype=dtype)
 
         # export library
         tmp = tempdir()
-        if tuning_option['measure_option']['build_func'] == 'ndk': # for android
+        if use_android:
             from tvm.contrib import ndk
             filename = "net.so"
             lib.export_library(tmp.relpath(filename), ndk.create_shared)
@@ -349,82 +320,64 @@ def tune_and_evaluate():
 
         # upload module to device
         print("Upload...")
-        remote = autotvm.measure.request_remote(device_key, timeout=10000)
+        remote = autotvm.measure.request_remote(device_key, 'localhost', 9190,
+                                                timeout=10000)
         remote.upload(tmp.relpath(filename))
         rlib = remote.load_module(filename)
 
         # upload parameters to device
         ctx = remote.context(str(target), 0)
-        rparams = {k: tvm.nd.array(v, ctx) for k, v in params.items()}
-        data_tvm = tvm.nd.array((np.random.uniform(size=shape['data'])).astype(dtype))
         module = runtime.create(graph, rlib, ctx)
+        data_tvm = tvm.nd.array((np.random.uniform(size=input_shape)).astype(dtype))
         module.set_input('data', data_tvm)
-        module.set_input(**rparams)
+        module.set_input(**params)
 
         # evaluate
         print("Evaluate inference time cost...")
         ftimer = module.module.time_evaluator("run", ctx, number=1, repeat=10)
-        prof_res = np.array(ftimer().results) * 1000 # convert to millisecond
+        prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
         print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
-<<<<<<< HEAD
-                (np.mean(prof_res), np.std(prof_res)))
-
-# We do not run the tuning in our webpage server since it takes too long.
-# Uncomment the following line to run by yourself.
-=======
               (np.mean(prof_res), np.std(prof_res)))
 
 # We do not run the tuning in our webpage server since it takes too long.
-# Uncomment the following line to run by yourself.
+# Uncomment the following line to run it by yourself.
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
-# tune_and_evaluate()
+# tune_and_evaluate(tuning_option)
 
 ######################################################################
 # Sample Output
 # -------------
-# The tuning needs to train xgboost models and use them for prediction.
+# The tuning needs to compile many programs and extract feature from them.
 # So a high performance CPU is recommended.
-# It takes about 1.5 hour on a 32T AMD Ryzen CPU.
-# One sample output is
+# One sample output is listed below.
+# It takes about 2 hours on a 32T AMD Ryzen Threadripper.
 #
 # .. code-block:: bash
 #
-<<<<<<< HEAD
-=======
 #    Extract tasks...
 #    Tuning...
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
-#    [Task  1/16]  Current/Best:   13.15/  20.49 GFLOPS | Progress: (297/1000) | 348.51 s Done.
-#    [Task  2/16]  Current/Best:   16.66/  22.64 GFLOPS | Progress: (475/1000) | 415.42 s Done.
-#    [Task  3/16]  Current/Best:   10.33/  14.19 GFLOPS | Progress: (306/1000) | 239.61 s Done.
-#    [Task  4/16]  Current/Best:   13.29/  20.88 GFLOPS | Progress: (242/1000) | 227.48 s Done.
-#    [Task  5/16]  Current/Best:   13.28/  15.61 GFLOPS | Progress: (237/1000) | 191.56 s Done.
-#    [Task  6/16]  Current/Best:   20.16/  23.86 GFLOPS | Progress: (315/1000) | 304.31 s Done.
-#    [Task  7/16]  Current/Best:    9.22/  22.00 GFLOPS | Progress: (458/1000) | 433.26 s Done.
-#    [Task  8/16]  Current/Best:   14.12/  17.80 GFLOPS | Progress: (270/1000) | 240.73 s Done.
-#    [Task  9/16]  Current/Best:   14.59/  24.02 GFLOPS | Progress: (209/1000) | 213.61 s Done.
-#    [Task 10/16]  Current/Best:    9.86/  21.74 GFLOPS | Progress: (367/1000) | 359.93 s Done.
-#    [Task 11/16]  Current/Best:    5.01/  18.86 GFLOPS | Progress: (202/1000) | 191.18 s Done.
-#    [Task 12/16]  Current/Best:    8.61/  25.23 GFLOPS | Progress: (220/1000) | 220.74 s Done.
-#    [Task 13/16]  Current/Best:   10.87/  25.79 GFLOPS | Progress: (465/1000) | 902.14 s Done.
-#    [Task 14/16]  Current/Best:   15.33/  29.38 GFLOPS | Progress: (239/1000) | 481.33 s Done.
-#    [Task 15/16]  Current/Best:   12.09/  38.60 GFLOPS | Progress: (476/1000) | 928.35 s Done.
-#    [Task 16/16]  Current/Best:   16.77/  47.08 GFLOPS | Progress: (255/1000) | 439.91 s Done.
+#    [Task  1/12]  Current/Best:   22.37/  52.19 GFLOPS | Progress: (544/1000) | 406.59 s Done.
+#    [Task  2/12]  Current/Best:    6.51/  18.77 GFLOPS | Progress: (608/1000) | 325.05 s Done.
+#    [Task  3/12]  Current/Best:    4.67/  24.87 GFLOPS | Progress: (480/1000) | 372.31 s Done.
+#    [Task  4/12]  Current/Best:   11.35/  46.83 GFLOPS | Progress: (736/1000) | 602.39 s Done.
+#    [Task  5/12]  Current/Best:    1.01/  19.80 GFLOPS | Progress: (448/1000) | 262.16 s Done.
+#    [Task  6/12]  Current/Best:    2.47/  23.76 GFLOPS | Progress: (672/1000) | 563.85 s Done.
+#    [Task  7/12]  Current/Best:   14.57/  33.97 GFLOPS | Progress: (544/1000) | 465.15 s Done.
+#    [Task  8/12]  Current/Best:    1.13/  17.65 GFLOPS | Progress: (576/1000) | 365.08 s Done.
+#    [Task  9/12]  Current/Best:   14.45/  22.66 GFLOPS | Progress: (928/1000) | 724.25 s Done.
+#    [Task 10/12]  Current/Best:    3.22/  15.36 GFLOPS | Progress: (864/1000) | 564.27 s Done.
+#    [Task 11/12]  Current/Best:   11.03/  32.23 GFLOPS | Progress: (736/1000) | 635.15 s Done.
+#    [Task 12/12]  Current/Best:    8.00/  21.65 GFLOPS | Progress: (1000/1000) | 1111.81 s Done.
 #    Compile...
 #    Upload...
 #    Evaluate inference time cost...
-#    Mean inference time (std dev): 156.51 ms (0.89 ms)
-#
-<<<<<<< HEAD
-=======
-
+#    Mean inference time (std dev): 162.59 ms (0.06 ms)
 
 ######################################################################
 #
-# .. note:: **Meet some problems?**
+# .. note:: **Experiencing Difficulties?**
 #
-#   The auto tuning module is error prone. If you always see " 0.00/ 0.00 GFLOPS",
+#   The auto tuning module is error-prone. If you always see " 0.00/ 0.00 GFLOPS",
 #   then there must be something wrong.
 #
 #   First, make sure you set the correct configuration of your device.
@@ -438,4 +391,3 @@ def tune_and_evaluate():
 #      logging.getLogger('autotvm').setLevel(logging.DEBUG)
 #
 #   Finally, always feel free to ask our community for help on https://discuss.tvm.ai
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581

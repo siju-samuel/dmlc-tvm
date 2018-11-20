@@ -45,6 +45,28 @@ def const(value, dtype=None):
     return _api_internal._const(value, dtype)
 
 
+def get_env_func(name):
+    """Get an EnvFunc by a global name.
+
+    Parameters
+    ----------
+    name: str
+        The name of the global function.
+
+    Returns
+    -------
+    env_func : EnvFunc
+        The result env function.
+
+    Note
+    ----
+    EnvFunc is a Node wrapper around
+    global function that can be serialized via its name.
+    This can be used to serialize function field in the language.
+    """
+    return _api_internal._EnvFuncGet(name)
+
+
 def convert(value):
     """Convert value to TVM node or function.
 
@@ -134,9 +156,9 @@ def any(*args):
         raise ValueError("Any must take at least 1 argument")
     if len(args) == 1:
         return args[0]
-    ret = _make.Or(args[0], args[1])
+    ret = _make._OpOr(args[0], args[1])
     for i in range(2, len(args)):
-        ret = _make.Or(ret, args[i])
+        ret = _make._OpOr(ret, args[i])
     return ret
 
 
@@ -158,9 +180,9 @@ def all(*args):
         raise ValueError("Any must take at least 1 argument")
     if len(args) == 1:
         return args[0]
-    ret = _make.And(args[0], args[1])
+    ret = _make._OpAnd(args[0], args[1])
     for i in range(2, len(args)):
-        ret = _make.And(ret, args[i])
+        ret = _make._OpAnd(ret, args[i])
     return ret
 
 
@@ -216,29 +238,48 @@ def compute(shape, fcompute, name="compute", tag="", attrs=None):
     tensor: Tensor
         The created tensor
     """
-    if _tag.TagScope.current is not None:
+    if _tag.TagScope.get_current() is not None:
         if tag != "":
             raise ValueError("nested tag is not allowed for now")
-        tag = _tag.TagScope.current.tag
+        tag = _tag.TagScope.get_current().tag
     shape = (shape,) if isinstance(shape, _expr.Expr) else shape
+    # for python3
+    shape = tuple([int(s) if isinstance(s, float) else s for s in shape])
     ndim = len(shape)
     code = fcompute.__code__
 
-    if fcompute.__code__.co_argcount == 0:
+    out_ndim = ndim
+    if code.co_argcount == 0:
         arg_names = ["i%d" % i for i in range(ndim)]
     else:
         arg_names = code.co_varnames[:code.co_argcount]
+        out_ndim = code.co_argcount
 
-    if ndim != len(arg_names):
+    if out_ndim != len(arg_names):
         raise ValueError("fcompute do not match dimension, ndim=%d" % ndim)
 
-    dim_var = [_IterVar((0, s), x, 0) for x, s in zip(arg_names, shape)]
+    dim_var = [_IterVar((0, s), x, 0) for x, s in zip(arg_names, shape[:out_ndim])]
     body = fcompute(*[v.var for v in dim_var])
-    if not isinstance(body, (list, tuple)):
-        body = [body]
-    body = convert(body)
-    op_node = _api_internal._ComputeOp(
-        name, tag, attrs, dim_var, body)
+
+    if isinstance(body, _tensor.TensorIntrinCall):
+        for i, s in enumerate(shape[out_ndim:]):
+            var_name = "ax" + str(i)
+            dim_var.append(_IterVar((0, s), var_name, 4))
+        op_node = _api_internal._TensorComputeOp(name,
+                                                 tag,
+                                                 dim_var,
+                                                 body.reduce_axis,
+                                                 out_ndim,
+                                                 body.intrin,
+                                                 body.tensors,
+                                                 body.regions)
+    else:
+        if not isinstance(body, (list, tuple)):
+            body = [body]
+        body = convert(body)
+        op_node = _api_internal._ComputeOp(
+            name, tag, attrs, dim_var, body)
+
     num = op_node.num_outputs
     outputs = tuple(op_node.output(i) for i in range(num))
     return outputs[0] if num == 1 else outputs
@@ -289,10 +330,10 @@ def scan(init, update, state_placeholder, inputs=None, name="scan", tag="", attr
       s_update = tvm.compute((m, n), lambda t, i: s_state[t-1, i] + X[t, i])
       res = tvm.scan(s_init, s_update, s_state, X)
     """
-    if _tag.TagScope.current is not None:
+    if _tag.TagScope.get_current() is not None:
         if tag != "":
             raise ValueError("nested tag is not allowed for now")
-        tag = _tag.TagScope.current.tag
+        tag = _tag.TagScope.get_current().tag
     if isinstance(init, _tensor.Tensor):
         init = [init]
     if isinstance(update, _tensor.Tensor):
@@ -385,10 +426,10 @@ def extern(shape,
                           "tvm.contrib.cblas.matmul",
                             ins[0], ins[1], outs[0], 0, 0), name="C")
     """
-    if _tag.TagScope.current is not None:
+    if _tag.TagScope.get_current() is not None:
         if tag != "":
             raise ValueError("nested tag is not allowed for now")
-        tag = _tag.TagScope.current.tag
+        tag = _tag.TagScope.get_current().tag
     shape = (shape,) if isinstance(shape, (_expr.Expr, _Integral)) else shape
     shape = [shape] if isinstance(shape[0], (_expr.Expr, _Integral)) else shape
     if in_buffers is not None:
@@ -507,13 +548,13 @@ def decl_buffer(shape,
     dtype = float32 if dtype is None else dtype
     strides = () if strides is None else strides
     if offset_factor != 0 and elem_offset is None:
-        elem_offset = var('%s_elem_offset' % name, shape[0].dtype)
+        shape_dtype = shape[0].dtype if hasattr(shape[0], "dtype") else "int32"
+        elem_offset = var('%s_elem_offset' % name, shape_dtype)
     if data is None:
         data = var(name, "handle")
     return _api_internal._Buffer(
         data, dtype, shape, strides, elem_offset, name, scope,
         data_alignment, offset_factor)
-
 
 def _IterVar(dom, name, iter_type, thread_tag=''):
     """Internal function to create IterVar
@@ -616,7 +657,7 @@ def select(cond, t, f):
     node : Node
         The tvm.expr.Select node
     """
-    return _make.Select(convert(cond), convert(t), convert(f))
+    return _expr.Select(convert(cond), convert(t), convert(f))
 
 
 def comm_reducer(fcombine, fidentity, name="reduce"):
@@ -699,7 +740,7 @@ def comm_reducer(fcombine, fidentity, name="reduce"):
         axis = convert(axis if isinstance(axis, (list, tuple)) else [axis])
         if where is None:
             where = convert(True)
-        outputs = tuple(_make.Reduce(combiner, expr, axis, where, i)
+        outputs = tuple(_expr.Reduce(combiner, expr, axis, where, i)
                         for i in range(size))
         return outputs[0] if size == 1 else outputs
 
@@ -751,5 +792,5 @@ def comm_reducer(fcombine, fidentity, name="reduce"):
 _init_api("tvm.api")
 #pylint: disable=unnecessary-lambda
 sum = comm_reducer(lambda x, y: x+y, lambda t: const(0, dtype=t), name="sum")
-min = comm_reducer(lambda x, y: _make.Min(x, y), max_value, name='min')
-max = comm_reducer(lambda x, y: _make.Max(x, y), min_value, name='max')
+min = comm_reducer(lambda x, y: _make._OpMin(x, y), max_value, name='min')
+max = comm_reducer(lambda x, y: _make._OpMax(x, y), min_value, name='max')

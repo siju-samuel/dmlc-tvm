@@ -16,6 +16,11 @@ tvm.autotvm.measure
 
 .. autofunction:: tvm.autotvm.measure.create_measure_batch
 
+.. autoclass:: tvm.autotvm.measure.measure_methods.LocalBuilder
+
+.. autoclass:: tvm.autotvm.measure.measure_methods.RPCRunner
+
+.. autoclass:: tvm.autotvm.measure.measure_methods.LocalRunner
 
 tvm.autotvm.tuner
 ~~~~~~~~~~~~~~~~~
@@ -44,12 +49,6 @@ tvm.autotvm.tuner
 .. automodule:: tvm.autotvm.tuner.callback
     :members:
 
-<<<<<<< HEAD
-.. automodule:: tvm.autotvm.tuner.graph_tuning
-    :members:
-
-=======
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 tvm.autotvm.task
 ~~~~~~~~~~~~~~~~
 .. automodule:: tvm.autotvm.task

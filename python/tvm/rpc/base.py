@@ -1,9 +1,6 @@
 """Base definitions for RPC."""
-<<<<<<< HEAD
-=======
 # pylint: disable=invalid-name
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 from __future__ import absolute_import
 
 import socket
@@ -28,10 +25,7 @@ RPC_CODE_DUPLICATE = RPC_MAGIC + 1
 # cannot found matched key in server
 RPC_CODE_MISMATCH = RPC_MAGIC + 2
 
-<<<<<<< HEAD
-=======
 logger = logging.getLogger('RPCServer')
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 class TrackerCode(object):
     """Enumeration code for the RPC tracker"""
@@ -129,11 +123,7 @@ def random_key(prefix, cmap=None):
         return prefix + str(random.random())
 
 
-<<<<<<< HEAD
-def connect_with_retry(addr, timeout=60, retry_period=5, silent=False):
-=======
 def connect_with_retry(addr, timeout=60, retry_period=5):
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     """Connect to a TPC address with retry
 
     This function is only reliable to short period of server restart.
@@ -148,12 +138,6 @@ def connect_with_retry(addr, timeout=60, retry_period=5):
 
     retry_period : float
          Number of seconds before we retry again.
-<<<<<<< HEAD
-
-    silent: bool
-        whether run in silent mode
-=======
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     """
     tstart = time.time()
     while True:
@@ -168,14 +152,8 @@ def connect_with_retry(addr, timeout=60, retry_period=5):
             if period > timeout:
                 raise RuntimeError(
                     "Failed to connect to server %s" % str(addr))
-<<<<<<< HEAD
-            if not silent:
-                logging.info("Cannot connect to tracker%s, retry in %g secs...",
-                             str(addr), retry_period)
-=======
             logger.warning("Cannot connect to tracker %s, retry in %g secs...",
                            str(addr), retry_period)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             time.sleep(retry_period)
 
 

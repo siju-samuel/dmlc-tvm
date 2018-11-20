@@ -30,6 +30,7 @@ List of operators
    topi.concatenate
    topi.split
    topi.take
+   topi.gather_nd
    topi.full
    topi.full_like
    topi.nn.relu
@@ -49,6 +50,7 @@ List of operators
    topi.min
    topi.argmax
    topi.argmin
+   topi.prod
    topi.broadcast_to
    topi.add
    topi.subtract
@@ -102,11 +104,13 @@ topi
 .. autofunction:: topi.concatenate
 .. autofunction:: topi.split
 .. autofunction:: topi.take
+.. autofunction:: topi.gather_nd
 .. autofunction:: topi.full
 .. autofunction:: topi.full_like
 .. autofunction:: topi.max
 .. autofunction:: topi.sum
 .. autofunction:: topi.min
+.. autofunction:: topi.prod
 .. autofunction:: topi.broadcast_to
 .. autofunction:: topi.add
 .. autofunction:: topi.subtract

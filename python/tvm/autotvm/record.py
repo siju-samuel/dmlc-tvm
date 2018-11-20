@@ -18,10 +18,7 @@ from .task import ConfigEntity, ApplyHistoryBest
 from .measure import MeasureInput, MeasureResult
 
 AUTOTVM_LOG_VERSION = 0.1
-<<<<<<< HEAD
-=======
 logger = logging.getLogger('autotvm')
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 try:  # convert unicode to str for python2
     _unicode = unicode
@@ -167,12 +164,8 @@ def load_from_file(filename):
     result: autotvm.tuner.MeasureResult
     """
     for row in open(filename):
-<<<<<<< HEAD
-        yield decode(row)
-=======
         if row and not row.startswith('#'):
             yield decode(row)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 
 def split_workload(in_file, clean=True):
@@ -189,17 +182,10 @@ def split_workload(in_file, clean=True):
     tic = time.time()
     lines = list(open(in_file).readlines())
 
-<<<<<<< HEAD
-    logging.info("start converting...")
-    pool = multiprocessing.Pool()
-    lines = pool.map(decode, lines)
-    logging.info("map done %.2f", time.time() - tic)
-=======
     logger.info("start converting...")
     pool = multiprocessing.Pool()
     lines = pool.map(decode, lines)
     logger.info("map done %.2f", time.time() - tic)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     wkl_dict = OrderedDict()
     for inp, res in lines:
@@ -221,21 +207,13 @@ def split_workload(in_file, clean=True):
                 cleaned.append([inp, res])
 
             # write to file
-<<<<<<< HEAD
-            logging.info("Key: %s\tValid: %d\tDup: %d\t", k, len(cleaned), len(v) - len(cleaned))
-=======
             logger.info("Key: %s\tValid: %d\tDup: %d\t", k, len(cleaned), len(v) - len(cleaned))
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             with open(args.i + ".%03d.wkl" % i, 'w') as fout:
                 for inp, res in cleaned:
                     fout.write(encode(inp, res) + '\n')
     else:
         for i, (k, v) in enumerate(wkl_dict.items()):
-<<<<<<< HEAD
-            logging.info("Key: %s\tNum: %d", k, len(v))
-=======
             logger.info("Key: %s\tNum: %d", k, len(v))
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
             with open(args.i + ".%03d.wkl" % i, 'w') as fout:
                 for inp, res in v:
                     fout.write(encode(inp, res) + '\n')
@@ -261,11 +239,7 @@ def pick_best(in_file, out_file):
     for v in best_context.best_by_targetkey.values():
         best_set.add(measure_str_key(v[0]))
 
-<<<<<<< HEAD
-    logging.info("Extract %d best records from the %s", len(best_set), in_file)
-=======
     logger.info("Extract %d best records from the %s", len(best_set), in_file)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     fout = open(out_file, 'w') if isinstance(out_file, str) else out_file
 
     for inp, res in load_from_file(in_file):
@@ -278,13 +252,13 @@ Usage:
 This record executable module has three modes.
 
 * Print log file in readable format
-e.g. python -m autotvm.record --mode read --i collect_conv.log --begin 0 --end 5 --ir --code
+e.g. python -m tvm.autotvm.record --mode read --i collect_conv.log --begin 0 --end 5 --ir --code
 
 * Extract history best from a large log file
-e.g. python -m autotvm.record --mode pick --i collect.log
+e.g. python -m tvm.autotvm.record --mode pick --i collect.log
 
 * Split a log file into separate files, each of which contains only a single wkl
-e.g. python -m autotvm.record --mode split --i collect.log
+e.g. python -m tvm.autotvm.record --mode split --i collect.log
 """
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -297,11 +271,7 @@ if __name__ == '__main__':
     parser.add_argument("--code", action='store_true')
 
     args = parser.parse_args()
-<<<<<<< HEAD
-    logging.basicConfig(level=logging.INFO)
-=======
-    logger.basicConfig(level=logger.INFO)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
+    logging.basicConfig(level=logger.INFO)
 
     if args.mode == 'pick':
         args.o = args.o or args.i + ".best.log"

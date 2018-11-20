@@ -8,6 +8,8 @@ In this part of documentation, we share the rationale for the specific choices m
    :maxdepth: 2
 
    runtime
+   debugger
    nnvm_json_spec
    nnvm_overview
    hybrid_script
+   relay_add_op

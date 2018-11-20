@@ -2,19 +2,13 @@
 """Namespace of callback utilities of AutoTVM"""
 import sys
 import time
-<<<<<<< HEAD
-=======
 import logging
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 import numpy as np
 
 from .. import record
 
-<<<<<<< HEAD
-=======
 logger = logging.getLogger('autotvm')
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
 def log_to_file(file_out, protocol='json'):
     """Log the tuning records into file.
@@ -98,11 +92,7 @@ def progress_bar(total, prefix=''):
     prefix: str
         The prefix of output message
     """
-<<<<<<< HEAD
-    class _Context:
-=======
     class _Context(object):
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
         """Context to store local variables"""
         def __init__(self):
             self.best_flops = 0
@@ -111,10 +101,16 @@ def progress_bar(total, prefix=''):
             self.total = total
 
         def __del__(self):
-            sys.stdout.write(' Done.\n')
+            if logger.level < logging.DEBUG:  # only print progress bar in non-debug mode
+                sys.stdout.write(' Done.\n')
 
     ctx = _Context()
     tic = time.time()
+
+    if logger.level < logging.DEBUG:  # only print progress bar in non-debug mode
+        sys.stdout.write('\r%s Current/Best: %7.2f/%7.2f GFLOPS | Progress: (%d/%d) '
+                         '| %.2f s' % (prefix, 0, 0, 0, total, time.time() - tic))
+        sys.stdout.flush()
 
     def _callback(tuner, inputs, results):
         ctx.ct += len(inputs)
@@ -124,25 +120,14 @@ def progress_bar(total, prefix=''):
             if res.error_no == 0:
                 flops = inp.task.flop / np.mean(res.costs)
 
-<<<<<<< HEAD
-        ctx.cur_flops = flops
-        ctx.best_flops = tuner.best_flops
-
-        sys.stdout.write('\r%s Current/Best: %7.2f/%7.2f GFLOPS | Progress: (%d/%d) '
-                         '| %.2f s' %
-                         (prefix, ctx.cur_flops/1e9, ctx.best_flops/1e9, ctx.ct, ctx.total,
-                          time.time() - tic))
-        sys.stdout.flush()
-=======
         if logger.level < logging.DEBUG:  # only print progress bar in non-debug mode
             ctx.cur_flops = flops
             ctx.best_flops = tuner.best_flops
 
-            sys.stdout.write('%s Current/Best: %7.2f/%7.2f GFLOPS | Progress: (%d/%d) '
-                             '| %.2f s\r' %
+            sys.stdout.write('\r%s Current/Best: %7.2f/%7.2f GFLOPS | Progress: (%d/%d) '
+                             '| %.2f s' %
                              (prefix, ctx.cur_flops/1e9, ctx.best_flops/1e9, ctx.ct, ctx.total,
                               time.time() - tic))
             sys.stdout.flush()
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
     return _callback

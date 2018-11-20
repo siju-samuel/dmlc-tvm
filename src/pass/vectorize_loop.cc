@@ -355,7 +355,8 @@ class Vectorizer : public IRMutator {
   // scalarize the statment
   Stmt Scalarize(Stmt stmt) {
     Var idx(var_->name_hint + ".s", var_->type);
-    stmt = Substitute(stmt, {{var_, idx}});
+    Map<Var, Expr> values{{var_, idx}};
+    stmt = Substitute(stmt, values);
     return For::make(idx, 0, var_lanes_, ForType::Serial, DeviceAPI::None, stmt);
   }
 
@@ -437,7 +438,6 @@ class LoopVectorizer : public IRMutator {
   Stmt Mutate_(const For* op, const Stmt& s) final {
     if (op->for_type == ForType::Vectorized) {
       CHECK(is_zero(op->min));
-      CHECK(is_positive_const(op->extent));
       int lanes = 0;
       bool succ = arith::GetConstInt(op->extent, &lanes);
       if (!succ || lanes < 1) {

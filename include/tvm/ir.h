@@ -10,8 +10,9 @@
 #include <ir/IR.h>
 #include <type_traits>
 #include <string>
-#include "./base.h"
-#include "./expr.h"
+#include "base.h"
+#include "expr.h"
+#include "runtime/util.h"
 
 namespace tvm {
 namespace ir {
@@ -27,7 +28,7 @@ struct CommReducerNode;
 
 struct CommReducer : public NodeRef {
   CommReducer() {}
-  explicit CommReducer(std::shared_ptr<Node> n) : NodeRef(n) {}
+  explicit CommReducer(NodePtr<Node> n) : NodeRef(n) {}
   /*!
    * \brief access the internal node container
    * \return the pointer to the internal node container
@@ -235,6 +236,11 @@ constexpr const char* pipeline_exec_scope = "pipeline_exec_scope";
  * Store statement.
  */
 constexpr const char* opengl_stage_scope = "opengl_stage_scope";
+
+/*!
+ * \brief Mark that it is in the device scope.
+ */
+constexpr const char* device_scope = "device_scope";
 
 /*!
  * \brief Check if attr_key is a pragma key extension
@@ -449,25 +455,6 @@ constexpr const char* tvm_global_barrier_kinit = "tvm_global_barrier_kinit";
  */
 constexpr const char* tvm_thread_allreduce = "tvm_thread_allreduce";
 
-/*! \brief The kind of structure field info */
-enum TVMStructFieldKind : int {
-  // array head address
-  kArrAddr,
-  kArrData,
-  kArrShape,
-  kArrStrides,
-  kArrNDim,
-  kArrTypeCode,
-  kArrTypeBits,
-  kArrTypeLanes,
-  kArrByteOffset,
-  kArrDeviceId,
-  kArrDeviceType,
-  kArrKindBound_,
-  // TVMValue field
-  kTVMValueContent,
-  kTVMValueKindBound_
-};
 }   // namespace intrinsic
 
 // Reuse IR node defintiion from HalideIR
@@ -513,8 +500,6 @@ using HalideIR::Internal::Block;
 using HalideIR::Internal::IfThenElse;
 using HalideIR::Internal::Evaluate;
 using HalideIR::Internal::Shuffle;
-// ir functions
-using HalideIR::Internal::is_const_power_of_two_integer;
 
 /*!
  * \brief Create a type annotation expression

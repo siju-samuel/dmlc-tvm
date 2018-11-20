@@ -9,15 +9,14 @@
 #ifndef TVM_IR_PASS_H_
 #define TVM_IR_PASS_H_
 
-#include <tvm/ir_functor.h>
 #include <arithmetic/Simplify.h>
 #include <unordered_map>
 #include <vector>
 #include <string>
-#include "./expr.h"
-#include "./buffer.h"
-#include "./schedule.h"
-#include "./lowered_func.h"
+#include "expr.h"
+#include "buffer.h"
+#include "schedule.h"
+#include "lowered_func.h"
 
 namespace tvm {
 namespace ir {
@@ -218,7 +217,7 @@ Stmt NarrowChannelAccess(Stmt stmt);
  * \param auto_max_step The maximum step before stop attach automatic unroll
  * \param auto_max_depth The maximum depth before stop attach automatic unroll
  * \param auto_max_extent The maximum extent of the loop we can unroll,
- *                        this is an legacy option that donot take the loop total steps into account.
+ *                     this is an legacy option that do not take the loop total steps into account.
  * \param explicit_unroll Whether explicitly unroll the loop, or leave unroll annotation to codegen.
  * \return Transformed stmt.
  */
@@ -326,6 +325,15 @@ Stmt RewriteUnsafeSelect(Stmt stmt);
  * \return Transformed stmt.
  */
 Stmt LowerStorageAccessInfo(Stmt stmt);
+
+/*!
+ * \brief Decorate the stmt with a device scope, this is helpful for 
+ * hardware accelerator without thread blocks.
+ *
+ * \param stmt The stmt to be trasnformed
+ * \return Transformed stmt.
+ */
+Stmt DecorateDeviceScope(Stmt stmt);
 
 /*!
  * \brief Make an user callable API LoweredFunc.

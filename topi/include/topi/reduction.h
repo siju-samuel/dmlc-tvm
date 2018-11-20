@@ -12,12 +12,21 @@
 #include <vector>
 #include <iterator>
 
+#include "topi/broadcast.h"
 #include "topi/elemwise.h"
 #include "topi/tags.h"
 #include "topi/transform.h"
 #include "topi/detail/ravel_unravel.h"
 #include "topi/detail/constant_utils.h"
 #include "tvm/tvm.h"
+
+/*!
+ * \brief macro flag to enable some legacy behavior which requires
+ * reduction result to be at least 1d.
+ */
+#ifndef TOPI_REDUCE_ATLEAST1D
+#define TOPI_REDUCE_ATLEAST1D 0
+#endif
 
 namespace topi {
 using namespace tvm;
@@ -94,9 +103,9 @@ inline Array<Expr> MakeReduceTargetShape(const std::vector<int>& real_axis,
         target_shape.push_back(data->shape[i]);
       }
     }
-    if (target_shape.size() == 0) {
-      target_shape.push_back(1);
-    }
+  }
+  if (target_shape.size() == 0 && TOPI_REDUCE_ATLEAST1D) {
+    target_shape.push_back(1);
   }
   return target_shape;
 }
@@ -253,7 +262,7 @@ using FIdentity = std::function<Array<Expr>(std::vector<Type> types)>;
 inline FCommReduce MakeCommReducer(FCombine fcombine,
                                    FIdentity fidentity,
                                    std::string name = "reduce") {
-  return [fcombine, fidentity, &name]
+  return [fcombine, fidentity, name]
   (Array<Expr> exprs, const Array<IterVar>& axis, Expr* condition) {
     Array<Var> lhs, rhs;
     std::vector<Type> dtypes;
@@ -286,6 +295,11 @@ inline Expr MinOp(Expr source, Array<IterVar> axis) {
 /*! \brief Wrap tvm::max to ensure we get the correct overload */
 inline Expr MaxOp(Expr source, Array<IterVar> axis) {
   return tvm::max(source, axis);  // NOLINT(*)
+}
+
+/*! \brief Wrap tvm::prod to ensure we get the correct overload */
+inline Expr ProdOp(Expr source, Array<IterVar> axis) {
+  return tvm::prod(source, axis);  // NOLINT(*)
 }
 
 /*!
@@ -424,6 +438,22 @@ inline Tensor argmax(const Tensor& data, Array<Expr> axis, bool keepdims = false
   };
   auto func = MakeCommReducer(fcombine, fidentity, "argmax");
   return CommReduceIdx(data, axis, func, keepdims);
+}
+
+/*!
+* \brief Creates product operation over given axis.
+*
+* \param data The input tensor
+* \param axis The axis to do product over. If axis is empty, the
+* operation will do the product over all elements of the array.
+* \param keepdims If this is set to true, the axes which are reduced are
+* left in the result as dimensions with size one. This enables the result
+* to broadcast correctly against the input array.
+*
+* \return A Tensor whose op member is the prod operation
+*/
+inline Tensor prod(const Tensor& data, Array<Expr> axis, bool keepdims = false) {  // NOLINT(*)
+  return CommReduce(data, axis, ProdOp, keepdims);
 }
 
 }  // namespace topi

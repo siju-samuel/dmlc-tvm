@@ -1,6 +1,9 @@
 """Internal utilities for parsing Python subset to HalideIR"""
 
+import ast
 import inspect
+import logging
+import sys
 import numpy
 from .intrin import HYBRID_GLOBALS
 from .._ffi.base import numeric_types
@@ -22,12 +25,24 @@ def make_nop():
     return _make.Evaluate(_api.const(0, dtype='int32'))
 
 
+def is_docstring(node):
+    """Checks if a Python AST node is a docstring"""
+    return isinstance(node, ast.Expr) and isinstance(node.value, ast.Str)
+
+
 def _pruned_source(func):
     """Prune source code's extra leading spaces"""
-    lines = inspect.getsource(func).split('\n')
-    leading_space = len(lines[0]) - len(lines[0].lstrip(' '))
-    lines = [line[leading_space:] for line in lines]
-    return '\n'.join(lines)
+    try:
+        lines = inspect.getsource(func).split('\n')
+        leading_space = len(lines[0]) - len(lines[0].lstrip(' '))
+        lines = [line[leading_space:] for line in lines]
+        return '\n'.join(lines)
+    except IOError as err:
+        if sys.version_info[0] == 2 and str(err) == 'could not get source code':
+            logging.log(logging.CRITICAL, \
+                        'This module is not fully operated under Python2... ' \
+                        'Please move to Python3!')
+            raise err
 
 
 def _is_tvm_arg_types(args):
@@ -64,3 +79,12 @@ def _restore_runtime(func, intersect):
         _globals.pop(elem)
     for k, v in intersect:
         _globals[k] = v
+
+def _internal_assert(cond, err):
+    """Simplify the code segment like if not XXX then raise an error"""
+    if not cond:
+        raise ValueError(err)
+
+# Almost the same functionality as the one above, but in this case,
+# the error is caused by users inproper usage.
+_user_assert = _internal_assert

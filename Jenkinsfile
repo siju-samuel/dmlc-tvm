@@ -96,6 +96,8 @@ stage('Build') {
            echo set\\(USE_RPC ON\\) >> config.cmake
            echo set\\(USE_SORT ON\\) >> config.cmake
            echo set\\(USE_GRAPH_RUNTIME ON\\) >> config.cmake
+           echo set\\(USE_STACKVM_RUNTIME ON\\) >> config.cmake
+           echo set\\(USE_GRAPH_RUNTIME_DEBUG ON\\) >> config.cmake
            echo set\\(USE_BLAS openblas\\) >> config.cmake
            echo set\\(CMAKE_CXX_COMPILER g++\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
@@ -110,6 +112,7 @@ stage('Build') {
            echo set\\(USE_OPENCL ON\\) >> config.cmake
            echo set\\(USE_ROCM ON\\) >> config.cmake
            echo set\\(USE_VULKAN ON\\) >> config.cmake
+           echo set\\(USE_GRAPH_RUNTIME_DEBUG ON\\) >> config.cmake
            echo set\\(CMAKE_CXX_COMPILER clang-6.0\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
            """
@@ -126,7 +129,10 @@ stage('Build') {
            cd build
            cp ../cmake/config.cmake .
            echo set\\(USE_SORT ON\\) >> config.cmake
+           echo set\\(USE_GRAPH_RUNTIME_DEBUG ON\\) >> config.cmake
            echo set\\(USE_LLVM llvm-config-4.0\\) >> config.cmake
+           echo set\\(USE_NNPACK ON\\) >> config.cmake
+           echo set\\(NNPACK_PATH /NNPACK/build/\\) >> config.cmake
            echo set\\(CMAKE_CXX_COMPILER g++\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
            """
@@ -135,6 +141,9 @@ stage('Build') {
         timeout(time: max_time, unit: 'MINUTES') {
           sh "${docker_run} tvmai/ci-cpu ./tests/scripts/task_cpp_unittest.sh"
           sh "${docker_run} tvmai/ci-cpu ./tests/scripts/task_python_vta.sh"
+          sh "${docker_run} tvmai/ci-cpu ./tests/scripts/task_rust.sh"
+          sh "${docker_run} tvmai/ci-cpu ./tests/scripts/task_python_unittest.sh"
+          sh "${docker_run} tvmai/ci-cpu ./tests/scripts/task_python_integration.sh"
         }
       }
     }
@@ -149,6 +158,7 @@ stage('Build') {
            cp ../cmake/config.cmake .
            echo set\\(USE_SORT ON\\) >> config.cmake
            echo set\\(USE_RPC ON\\) >> config.cmake
+           echo set\\(USE_GRAPH_RUNTIME_DEBUG ON\\) >> config.cmake
            echo set\\(USE_LLVM llvm-config-5.0\\) >> config.cmake
            echo set\\(CMAKE_CXX_COMPILER g++\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
@@ -168,10 +178,7 @@ stage('Unit Test') {
         unpack_lib('gpu', tvm_multilib)
         timeout(time: max_time, unit: 'MINUTES') {
           sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_python_unittest.sh"
-<<<<<<< HEAD
-=======
           sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_python_integration.sh"
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
         }
       }
     }
@@ -189,13 +196,8 @@ stage('Unit Test') {
       }
     }
   },
-<<<<<<< HEAD
-  'java': {
-    node('GPU' && 'linux') {
-=======
   'java: GPU': {
     node('GPU') {
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
       ws('workspace/tvm/ut-java') {
         init_git()
         unpack_lib('gpu', tvm_multilib)
@@ -213,12 +215,6 @@ stage('Integration Test') {
       ws('workspace/tvm/it-python-gpu') {
         init_git()
         unpack_lib('gpu', tvm_multilib)
-<<<<<<< HEAD
-        timeout(time: max_time, unit: 'MINUTES') {
-          sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_python_integration.sh"
-          sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_python_topi.sh"
-          sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_cpp_topi.sh"
-=======
         timeout(time: max_time, unit: 'MINUTES') {
           sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_python_topi.sh"
           sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_cpp_topi.sh"
@@ -232,7 +228,6 @@ stage('Integration Test') {
         init_git()
         unpack_lib('gpu', tvm_multilib)
         timeout(time: max_time, unit: 'MINUTES') {
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
           sh "${docker_run} tvmai/ci-gpu ./tests/scripts/task_python_nnvm.sh"
         }
       }

@@ -12,7 +12,7 @@
 #include <tvm/packed_func_ext.h>
 #include <nnvm/compiler/op_attr_types.h>
 #include <tvm/tvm.h>
-#include "./nn_common.h"
+#include "nn_common.h"
 #include "../op_common.h"
 #include "../elemwise_op_common.h"
 #include "topi/nn.h"
@@ -82,7 +82,9 @@ inline bool Conv2DInferShape(const nnvm::NodeAttrs& attrs,
 
   wshape[kernel_layout.indexof('O')] *= param.groups;
 
-  NNVM_ASSIGN_INPUT_SHAPE(attrs, *in_shape, Conv2DParam::kWeight, wshape);
+  if (in_shape->at(Conv2DParam::kWeight).ndim() == 0) {
+    NNVM_ASSIGN_INPUT_SHAPE(attrs, *in_shape, Conv2DParam::kWeight, wshape);
+  }
   if (param.use_bias) {
     static const Layout default_bias_layout("C");
     TShape bias_shape({param.channels});
@@ -344,7 +346,6 @@ NNVM_REGISTER_OP(_contrib_conv2d_NCHWc)
 .set_num_inputs(UseBiasNumInputs<Conv2DParam>)
 .set_support_level(2);
 
-
 NNVM_REGISTER_OP(_contrib_conv2d_winograd_weight_transform)
 .describe(R"code(Weight transformation of winograd fast convolution algorithm.
 Separate this into another nnvm symbol in order to enable Precompute Pass to compute the
@@ -556,7 +557,7 @@ v            (batch_size, channels, out_height, out_width) if `layout` is `NCHW`
 .set_attr<FGetAttrDict>("FGetAttrDict", ParamGetAttrDict<Conv2DTransposeParam>)
 .set_attr<FListInputNames>("FListInputNames", UseBiasListInputNames<Conv2DTransposeParam>)
 .set_attr<FInferShape>("FInferShape", Conv2DTransposeInferShape)
-.set_attr<FInferType>("FInferType", ElemwiseType<-1, 1>)
+.set_attr<FInferType>("FInferType", Conv2DInferType<Conv2DTransposeParam>)
 .set_attr<FCorrectLayout>("FCorrectLayout", Conv2DTransposeCorrectLayout)
 .set_num_outputs(1)
 .set_num_inputs(UseBiasNumInputs<Conv2DTransposeParam>)

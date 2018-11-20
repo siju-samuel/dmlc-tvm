@@ -3,6 +3,8 @@
 * \brief Registration of TVM operators and schedules
 * \file topi.cc
 */
+#define TOPI_REDUCE_ATLEAST1D 0
+
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/module.h>
 #include <tvm/runtime/registry.h>
@@ -30,7 +32,6 @@
 #include <topi/vision/reorg.h>
 #include <topi/image/resize.h>
 #include <topi/vision/yolo/region.h>
-#include <topi/vision/yolo/yolo.h>
 #include <topi/generic/default.h>
 #include <topi/generic/extern.h>
 #include <topi/generic/injective.h>
@@ -230,6 +231,11 @@ TVM_REGISTER_GLOBAL("topi.argmax")
   *rv = topi::argmax(args[0], ArrayOrInt(args[1]), args[2]);
   });
 
+TVM_REGISTER_GLOBAL("topi.prod")
+.set_body([](TVMArgs args, TVMRetValue *rv) {
+  *rv = topi::prod(args[0], ArrayOrInt(args[1]), args[2]);
+  });
+
 /* Ops from transform.h */
 TVM_REGISTER_GLOBAL("topi.expand_dims")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
@@ -284,6 +290,20 @@ TVM_REGISTER_GLOBAL("topi.where")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
   *rv = where(args[0], args[1], args[2]);
 });
+
+TVM_REGISTER_GLOBAL("topi.gather_nd")
+.set_body([](TVMArgs args, TVMRetValue *rv) {
+  *rv = gather_nd(args[0], args[1]);
+});
+
+TVM_REGISTER_GLOBAL("topi.matmul")
+.set_body([](TVMArgs args, TVMRetValue *rv) {
+  switch ( args.size() ) {
+    case 2: *rv = matmul(args[0], args[1]); break;
+    case 3: *rv = matmul(args[0], args[1], args[2]); break;
+    case 4: *rv = matmul(args[0], args[1], args[2], args[3]); break;
+    default: CHECK(0) << "topi.matmul expects 2, 3 or 4 arguments";
+  }});
 
 TVM_REGISTER_GLOBAL("topi.strided_slice")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
@@ -395,11 +415,6 @@ TVM_REGISTER_GLOBAL("topi.vision.reorg")
 TVM_REGISTER_GLOBAL("topi.vision.yolo.region")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
   *rv = vision::yolo::region(args[0], args[1], args[2], args[3], args[4], args[5]);
-  });
-
-TVM_REGISTER_GLOBAL("topi.vision.yolo.yolo")
-.set_body([](TVMArgs args, TVMRetValue *rv) {
-  *rv = vision::yolo::yolo(args[0], args[1], args[2]);
   });
 
 /* Ops from image/resize.h */

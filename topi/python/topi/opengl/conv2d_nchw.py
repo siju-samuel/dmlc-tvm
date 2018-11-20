@@ -21,11 +21,8 @@ def schedule_conv2d_nchw(outs):
     """
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
-<<<<<<< HEAD
-=======
     scheduled_ops = []
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     def _schedule(conv2d, data):
         if conv2d.op in s.outputs:
             Out = conv2d
@@ -42,11 +39,7 @@ def schedule_conv2d_nchw(outs):
             if OP not in s.outputs:
                 s[OP].opengl()
             for tensor in OP.input_tensors:
-<<<<<<< HEAD
-                if tensor.op.input_tensors:
-=======
                 if tensor.op.input_tensors and tensor.op not in scheduled_ops:
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
                     traverse(tensor.op)
         # schedule conv2d_nchw
         elif OP.tag.startswith('conv2d_nchw'):
@@ -59,10 +52,7 @@ def schedule_conv2d_nchw(outs):
         else:
             raise RuntimeError("Unsupported operator: %s" % OP.tag)
 
-<<<<<<< HEAD
-=======
         scheduled_ops.append(OP)
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
     traverse(outs[0].op)
     return s

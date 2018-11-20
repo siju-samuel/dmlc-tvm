@@ -3,6 +3,9 @@
  * \file reduce.cc
  * \brief reduce operator.
  */
+// Enforce TOPI to use old behavior that reduces to at least 1d
+#define TOPI_REDUCE_ATLEAST1D 1
+
 #include <nnvm/op.h>
 #include <nnvm/node.h>
 #include <nnvm/op_attr_types.h>
@@ -16,6 +19,8 @@
 #include "topi/elemwise.h"
 #include "topi/reduction.h"
 #include "topi/transform.h"
+
+static_assert(TOPI_REDUCE_ATLEAST1D, "need to use legacy reduce behavior");
 
 namespace nnvm {
 namespace top {
@@ -67,10 +72,11 @@ inline TShape ReduceShapeImpl(const TShape& ishape,
   if (r_axes.ndim() == indim)
     return TShape(keepdims ? indim : 1);
 
+  CHECK(r_axes.ndim() < indim);
   if (keepdims) {
     TShape oshape(ishape);
     for (unsigned i = 0, j = 0; i < indim; ++i) {
-      if (i != r_axes[j]) continue;
+      if (j >= r_axes.ndim() || i != r_axes[j]) continue;
       oshape[i] = 1;
       ++j;
     }
@@ -79,7 +85,7 @@ inline TShape ReduceShapeImpl(const TShape& ishape,
 
   TShape oshape(indim - r_axes.ndim());
   for (unsigned i = 0, j = 0, k = 0; i < indim; ++i) {
-    if (i == r_axes[j]) {
+    if (j < r_axes.ndim() && i == r_axes[j]) {
       ++j;
       continue;
     }
@@ -95,7 +101,7 @@ inline bool ReduceShape(const nnvm::NodeAttrs& attrs,
   CHECK_EQ(out_attrs->size(), 1U);
   if ((*in_attrs)[0].ndim() == 0) return false;
   const ReduceParam& param = nnvm::get<ReduceParam>(attrs.parsed);
-  NNVM_ASSIGN_INPUT_SHAPE(
+  NNVM_ASSIGN_OUTPUT_SHAPE(
       attrs, *out_attrs, 0,
       ReduceShapeImpl((*in_attrs)[0], param.axis,
                       param.keepdims, param.exclude));
@@ -266,15 +272,13 @@ NNVM_REGISTER_BASE_REDUCE_OP(collapse_sum)
     return Array<Tensor>{ topi::collapse_sum(inputs[0], inputs[1]->shape) };
 });
 
-template<int Type>
 inline bool InferFixedType(const NodeAttrs& attrs,
                           std::vector<int>* in_attrs,
                           std::vector<int>* out_attrs) {
-  // Static type inference for argmax operation. Argmax return indices which
-  // should have Int32 type as shapes do.
   CHECK_EQ(in_attrs->size(), 1U);
   CHECK_EQ(out_attrs->size(), 1U);
-  NNVM_ASSIGN_OUTPUT_TYPE(attrs, *out_attrs, 0, static_cast<int>(Type));
+  const ReduceParam& param = nnvm::get<ReduceParam>(attrs.parsed);
+  NNVM_ASSIGN_OUTPUT_TYPE(attrs, *out_attrs, 0, param.dtype);
   return true;
 }
 
@@ -285,7 +289,7 @@ values over a given axis.
 )code" NNVM_ADD_FILELINE)
 .add_argument("data", "Tensor", "The input")
 .set_attr<FInferShape>("FInferShape", ReduceShape)
-.set_attr<FInferType>("FInferType", InferFixedType<kInt32>)
+.set_attr<FInferType>("FInferType", InferFixedType)
 .set_attr<FCorrectLayout>("FCorrectLayout", ElemwiseFixedLayoutUnknownOut<1, 1>)
 .set_num_inputs(1)
 .set_attr<FTVMCompute>(
@@ -296,8 +300,9 @@ values over a given axis.
     TShape r_axes = GetReduceAxes(inputs[0]->shape.size(),
                                   param.axis, param.exclude);
     auto axis = ShapeToArray(r_axes);
-    return Array<Tensor>{
-      topi::argmax(inputs[0], axis, param.keepdims) };
+    Tensor out = topi::argmax(inputs[0], axis, param.keepdims);
+    if (param.dtype == kFloat32) out = topi::cast(out, out_info[0]->dtype);
+    return Array<Tensor>{out};
 });
 
 NNVM_REGISTER_BASE_REDUCE_OP(argmin)
@@ -307,7 +312,7 @@ values over a given axis.
 )code" NNVM_ADD_FILELINE)
 .add_argument("data", "Tensor", "The input")
 .set_attr<FInferShape>("FInferShape", ReduceShape)
-.set_attr<FInferType>("FInferType", InferFixedType<kInt32>)
+.set_attr<FInferType>("FInferType", InferFixedType)
 .set_attr<FCorrectLayout>("FCorrectLayout", ElemwiseFixedLayoutUnknownOut<1, 1>)
 .set_num_inputs(1)
 .set_attr<FTVMCompute>(
@@ -318,8 +323,73 @@ values over a given axis.
     TShape r_axes = GetReduceAxes(inputs[0]->shape.size(),
                                   param.axis, param.exclude);
     auto axis = ShapeToArray(r_axes);
+    Tensor out = topi::argmin(inputs[0], axis, param.keepdims);
+    if (param.dtype == kFloat32) out = topi::cast(out, out_info[0]->dtype);
+    return Array<Tensor>{out};
+});
+
+NNVM_REGISTER_REDUCE_OP(mean)
+  .describe(R"code(Computes the mean of array elements over given axes.
+
+Example::
+
+  data = [[[1,2],[2,3],[1,3]],
+          [[1,4],[4,3],[5,2]],
+          [[7,1],[7,2],[7,3]]]
+
+  mean(data)
+  [3.22]
+
+  mean(data, axis=[1,2])
+  [ 2.  3.16666667  4.5]
+
+)code" NNVM_ADD_FILELINE)
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const NodeAttrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Array<Tensor>& out_info) {
+    const ReduceParam& param = nnvm::get<ReduceParam>(attrs.parsed);
+    TShape r_axes = GetReduceAxes(inputs[0]->shape.size(),
+                                  param.axis, param.exclude);
+    if (!r_axes.ndim()) return Array<Tensor> { topi::identity(inputs[0]) };
+    auto axis = ShapeToArray(r_axes);
+
+    Expr count = make_const(inputs[0]->dtype, 1);
+    for (auto& i : r_axes) {
+      count *= inputs[0]->shape[i];
+    }
+
     return Array<Tensor>{
-      topi::argmin(inputs[0], axis, param.keepdims) };
+      topi::divide(topi::sum(inputs[0], axis, param.keepdims), count) };
+});
+
+NNVM_REGISTER_REDUCE_OP(prod)
+  .describe(R"code(Computes the products of array elements over given axes.
+
+Example::
+
+  data = [[[1,2],[2,3],[1,3]],
+          [[1,4],[4,3],[5,2]],
+          [[7,1],[7,2],[7,3]]]
+
+  mean(data, axis=1)
+  [35562240]
+
+  mean(data, axis=[1,2])
+  [ 36  480  2058]
+
+)code" NNVM_ADD_FILELINE)
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const NodeAttrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Array<Tensor>& out_info) {
+    const ReduceParam& param = nnvm::get<ReduceParam>(attrs.parsed);
+    TShape r_axes = GetReduceAxes(inputs[0]->shape.size(),
+                                  param.axis, param.exclude);
+    if (!r_axes.ndim()) return Array<Tensor> { topi::identity(inputs[0]) };
+    auto axis = ShapeToArray(r_axes);
+    return Array<Tensor>{
+      topi::prod(inputs[0], axis, param.keepdims) };
 });
 
 

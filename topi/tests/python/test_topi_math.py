@@ -37,9 +37,10 @@ def test_ewise():
             a = tvm.nd.array(a_np, ctx)
             b = tvm.nd.array(np.zeros_like(b_np), ctx)
             foo(a, b)
-            np.testing.assert_allclose(b.asnumpy(), b_np, rtol=1e-5, atol=1e-5)
+            tvm.testing.assert_allclose(b.asnumpy(), b_np, rtol=1e-5, atol=1e-5)
 
-        for device in ['cuda', 'opencl', 'metal', 'rocm', 'vulkan', 'llvm', 'nvptx']:
+        for device in ['cuda', 'opencl', 'metal', 'rocm', 'vulkan', 'llvm', 'nvptx', 'sdaccel',
+                       'aocl_sw_emu']:
             check_device(device)
 
 

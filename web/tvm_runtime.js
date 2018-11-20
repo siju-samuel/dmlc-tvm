@@ -2,7 +2,7 @@
  * TVM Javascript web runtime library.
  *
  * @projectname tvm
- * @version 0.1
+ * @version 0.5.dev
  */
 /* eslint no-unused-vars: "off" */
 /* eslint no-unexpected-multiline: "off" */
@@ -696,6 +696,7 @@ var tvm_runtime = tvm_runtime || {};
       1 : "cpu",
       2 : "gpu",
       4 : "opencl",
+      7 : "vulkan",
       8 : "metal",
       9 : "vpi",
       11 : "opengl",
@@ -706,6 +707,7 @@ var tvm_runtime = tvm_runtime || {};
       "cuda": 2,
       "cl": 4,
       "opencl": 4,
+      "vulkan": 7,
       "metal": 8,
       "vpi": 9,
       "opengl": 11,

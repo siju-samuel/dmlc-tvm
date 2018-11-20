@@ -10,25 +10,21 @@ of the DispatchContext base class.
 - During search, we can use it to pass the current proposal from tuner.
 - During evaluation, we can use it to set pick the best policy.
 """
-<<<<<<< HEAD
-=======
 # pylint: disable=invalid-name
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 from __future__ import absolute_import as _abs
 
 import logging
 
-from decorator import decorate
 import numpy as np
+from decorator import decorate
 
 from tvm import target as _target
 
-<<<<<<< HEAD
-=======
+from .space import FallbackConfigEntity
+
 logger = logging.getLogger('autotvm')
 
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 class DispatchContext(object):
     """
     Base class of dispatch context.
@@ -38,9 +34,83 @@ class DispatchContext(object):
     """
     current = None
 
+    def __init__(self):
+        self._old_ctx = DispatchContext.current
+
     def query(self, target, workload):
         """
-        Query the context to get the specific implementation.
+        Query the context to get the specific config for a template.
+        If cannot find the result inside this context, this function will query it
+        from the upper contexts.
+
+        Parameters
+        ----------
+        target: Target
+            The current target
+        workload : Workload
+            The current workload.
+
+        Returns
+        -------
+        cfg : ConfigSpace
+            The specific configuration.
+        """
+        ret = self._query_inside(target, workload)
+        if ret is None:
+            ret = self._old_ctx.query(target, workload)
+        return ret
+
+    def update(self, target, workload, cfg):
+        """
+        Update context with a specific config.
+
+        Parameters
+        ----------
+        target: Target
+            The current target
+        workload : Workload
+            The current workload.
+        cfg : ConfigSpace
+            The specific configuration.
+
+        Note
+        ----
+        This interface is for cases when TVM decides to replace an operator in the graph.
+        For example, `AlterOpLayout` pass (enables when `opt_level = 3`) replaces `NCHW`
+        convolution with `NCHW[x]c` implementation on x86 CPUs.
+        Thus in TOPI, we first query schedule using original `NCHW` workload,
+        then update the dispatcher with the new `NCHW[x]c` workload.
+        So that later on, `NCHW[x]c` convolution can get schedule from the dispatcher using
+        its own workload directly.
+
+        .. code-block:: python
+
+            @conv2d_alter_layout.register("cpu")
+            def _alter_conv2d_layout(attrs, inputs, tinfo):
+                workload = get_conv2d_workload(...)
+                dispatch_ctx = autotvm.task.DispatchContext.current
+                target = tvm.target.current_target()
+                config = dispatch_ctx.query(target, workload)
+
+                # Get conv2d_NCHWc workload from config
+                # new_workload = ...
+                # new_inputs = ...
+                # new_attrs = ...
+
+                # Store altered operator's config
+                dispatch_ctx.update(target, new_workload, config)
+                return sym.contrib.conv2d_NCHWc(*new_inputs, **new_attrs)
+
+        We directly store `config` back because `conv2d_NCHW` and `conv2d_NCHWc`
+        share the same schedule parameters.
+        One can construct a new `ConfigEntity` if this is not the case.
+        """
+        raise NotImplementedError()
+
+    def _query_inside(self, target, workload):
+        """
+        Query the context to get the specific config for a template.
+        This function only query config inside this context.
 
         Parameters
         ----------
@@ -121,12 +191,17 @@ def dispatcher(fworkload):
     def dispatch_func(func, *args, **kwargs):
         """The wrapped dispatch function"""
         tgt = _target.current_target()
-        context = DispatchContext.current
-        if context is None:
-            raise RuntimeError("DispatchContext is not initialized")
         workload = func(*args, **kwargs)
-        cfg = context.query(tgt, workload)
-        return dispatch_dict[cfg.template_key](cfg, *args, **kwargs)
+        cfg = DispatchContext.current.query(tgt, workload)
+        if cfg.is_fallback and not cfg.template_key:
+            # first try 'direct' template
+            if 'direct' in dispatch_dict:
+                return dispatch_dict['direct'](cfg, *args, **kwargs)
+            # otherwise pick a random template
+            for v in dispatch_dict.values():
+                return v(cfg, *args, **kwargs)
+        else:
+            return dispatch_dict[cfg.template_key](cfg, *args, **kwargs)
 
     fdecorate = decorate(fworkload, dispatch_func)
     fdecorate.register = register
@@ -134,7 +209,7 @@ def dispatcher(fworkload):
 
 
 class ApplyConfig(DispatchContext):
-    """Apply a specific config entity during query.
+    """Apply a deterministic config entity for all queries.
 
     Parameters
     ----------
@@ -146,10 +221,15 @@ class ApplyConfig(DispatchContext):
         self._config = config
         self.workload = None
 
-    def query(self, target, workload):
+    def _query_inside(self, target, workload):
         """Override query"""
         self.workload = workload
         return self._config
+
+    def update(self, target, workload, cfg):
+        """Override update"""
+        self.workload = workload
+        self._config = cfg
 
 
 class ApplyHistoryBest(DispatchContext):
@@ -163,15 +243,13 @@ class ApplyHistoryBest(DispatchContext):
         If is str, then it should be the filename of a records log file.
                    Each row of this file is an encoded record pair.
         Otherwise, it is an iterator.
-    default: ConfigEntity, optional
-        The default config to return when no history records
     """
-    def __init__(self, records, default=None):
+    def __init__(self, records):
         super(ApplyHistoryBest, self).__init__()
 
         self.best_by_targetkey = {}
         self.best_by_model = {}
-        self._default = default
+        self._best_user_defined = {}
 
         if records:
             self.load(records)
@@ -214,45 +292,176 @@ class ApplyHistoryBest(DispatchContext):
                         best_by_targetkey[key] = (inp, res)
 
             # use model as key to build best map
-            for opt in inp.target.options:
-                if opt.startswith("-model"):
-                    model = opt[7:]
-                    key = (model, inp.task.workload)
-                    if key not in best_by_model:
-                        best_by_model[key] = (inp, res)
-                    else:
-                        _, other_res = best_by_model[key]
-                        if np.mean(other_res.costs) > np.mean(res.costs):
-                            best_by_model[key] = (inp, res)
-                    break
+            key = (inp.target.model, inp.task.workload)
+            if key not in best_by_model:
+                best_by_model[key] = (inp, res)
+            else:
+                _, other_res = best_by_model[key]
+                if np.mean(other_res.costs) > np.mean(res.costs):
+                    best_by_model[key] = (inp, res)
 
-<<<<<<< HEAD
-        logging.debug("Finish loading %d records", counter)
-=======
         logger.debug("Finish loading %d records", counter)
->>>>>>> c9f9a3f9be7db611d11b9a28476af62571af9581
 
-    def query(self, target, workload):
+    def _query_inside(self, target, workload):
         if target is None:
             raise RuntimeError("Need a target context to find the history best. "
                                "Hint: If your target is llvm, use `with tvm.target.create('llvm'):`"
                                " above the dispatcher call. So does other target. ")
 
         # first try matching by model
-        for opt in target.options:
-            if opt.startswith("-model"):
-                model = opt[7:]
-                key = (model, workload)
-                if key in self.best_by_model:
-                    return self.best_by_model[key][0].config
+        key = (target.model, workload)
+        if key in self._best_user_defined:
+            return self._best_user_defined[key]
+        if key in self.best_by_model:
+            return self.best_by_model[key][0].config
 
         # then try matching by target key
         for k in target.keys:
             key = (k, workload)
+            if key in self._best_user_defined:
+                return self._best_user_defined[key]
             if key in self.best_by_targetkey:
                 return self.best_by_targetkey[key][0].config
 
-        if self._default:
-            return self._default
-        raise RuntimeError(
-            "Cannot find config for target=%s, workload=%s" % (target, workload))
+        return None
+
+    def update(self, target, workload, cfg):
+        model = target.model
+        key = (model, workload)
+        self._best_user_defined[key] = cfg
+
+        for k in target.keys:
+            key = (k, workload)
+            self._best_user_defined[key] = cfg
+
+
+class FallbackContext(DispatchContext):
+    """
+    A fallback dispatch context.
+
+    Any tunable template can be called under this context.
+    This is the root context.
+    """
+
+    def __init__(self):
+        super(FallbackContext, self).__init__()
+        self.memory = {}
+        self.silent = False
+
+        # a set to prevent print duplicated message
+        self.messages = set()
+
+    def _query_inside(self, target, workload):
+        key = (str(target), workload)
+        if key in self.memory:
+            return self.memory[key]
+
+        if not self.silent:
+            msg = "Cannot find config for target=%s, workload=%s. A fallback configuration "\
+                  "is used, which may bring great performance regression." % (target, workload)
+            if msg not in self.messages:
+                self.messages.add(msg)
+                logger.warning(msg)
+        cfg = FallbackConfigEntity()
+
+        # cache this config
+        self.memory[key] = cfg
+        return cfg
+
+    def clear_cache(self, target, workload):
+        """Clear fallback cache. Pass the same argument as _query_inside to this function
+        to clean the cache.
+
+        Parameters
+        ----------
+        target: Target
+            The current target
+        workload : Workload
+            The current workload.
+        """
+        key = (str(target), workload)
+        if key in self.memory:
+            del self.memory[key]
+
+    def update(self, target, workload, cfg):
+        key = (str(target), workload)
+        self.memory[key] = cfg
+
+DispatchContext.current = FallbackContext()
+
+def clear_fallback_cache(target, workload):
+    """Clear fallback cache. Pass the same argument as _query_inside to this function
+    to clean the cache.
+
+    Parameters
+    ----------
+    target: Target
+        The current target
+    workload : Workload
+        The current workload.
+
+    Note
+    ----
+    This is used in alter_op_layout to clear the bad cache created before call topi compute function
+    """
+    context = DispatchContext.current
+    while not isinstance(context, FallbackContext):
+        context = context._old_ctx
+    context.clear_cache(target, workload)
+
+class ApplyGraphBest(DispatchContext):
+    """Load the graph level tuning optimal schedules.
+
+    The input records should be in the ascending order of
+    node index for target operator. Usually this can be obtained
+    with graph tuner.
+
+    This context maintains an internal counter to indicate the current
+    node index.
+    """
+    def __init__(self, records):
+        """
+        Parameters
+        ----------
+        records : str or iterator of (MeasureInput, MeasureResult)
+            Collection of tuning records.
+            If is str, then it should be the filename of a records log file.
+                   Each row of this file is an encoded record pair.
+            Otherwise, it is an iterator.
+        """
+        from ..record import load_from_file
+
+        super(ApplyGraphBest, self).__init__()
+        if isinstance(records, str):
+            records = load_from_file(records)
+        self._records = list(records)
+        self._counter = 0
+        self._global_cfg_dict = {}
+
+    def _query_inside(self, target, workload):
+        """
+        Query the context to get config from records.
+
+        Parameters
+        ----------
+        target : Target
+            The current target
+        workload : Workload
+            The current workload.
+
+        Returns
+        -------
+        cfg : ConfigSpace
+            The specific configuration.
+        """
+        if self._counter < len(self._records):
+            cfg = self._records[self._counter][0].config
+            self._counter += 1
+            self.update(target, workload, cfg)
+            return cfg
+        key = (str(target), workload)
+        return self._global_cfg_dict[key]
+
+    def update(self, target, workload, cfg):
+        key = (str(target), workload)
+        self._global_cfg_dict[key] = cfg

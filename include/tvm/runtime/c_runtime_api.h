@@ -43,7 +43,7 @@
 #endif
 
 // TVM version
-#define TVM_VERSION "0.4.0"
+#define TVM_VERSION "0.5.dev"
 
 
 // TVM Runtime is DLPack compatible.
@@ -62,11 +62,7 @@ typedef int64_t tvm_index_t;
 typedef enum {
   kDLAOCL = 5,
   kDLSDAccel = 6,
-  kDLVulkan = 7,
   kOpenGL = 11,
-  // Extension DRAM type, used for quickly test extension device
-  // The device api can differ depending on the xpu driver registered.
-  kExtDev = 12,
   // AddExtraTVMType which is not in DLPack here
 } TVMDeviceExtType;
 
@@ -444,6 +440,32 @@ TVM_DLL int TVMArrayCopyToBytes(TVMArrayHandle handle,
 TVM_DLL int TVMArrayCopyFromTo(TVMArrayHandle from,
                                TVMArrayHandle to,
                                TVMStreamHandle stream);
+
+/*!
+ * \brief Produce an array from the DLManagedTensor that shares data memory
+ * with the DLManagedTensor.
+ * \param from The source DLManagedTensor.
+ * \param out The output array handle.
+ * \return 0 when success, -1 when failure happens
+ */
+TVM_DLL int TVMArrayFromDLPack(DLManagedTensor* from,
+                               TVMArrayHandle* out);
+
+/*!
+ * \brief Produce a DLMangedTensor from the array that shares data memory with
+ * the array.
+ * \param from The source array.
+ * \param out The DLManagedTensor handle.
+ * \return 0 when success, -1 when failure happens
+ */
+TVM_DLL int TVMArrayToDLPack(TVMArrayHandle from,
+                             DLManagedTensor** out);
+
+/*!
+ * \brief Delete (free) a DLManagedTensor's data.
+ * \param dltensor Pointer to the DLManagedTensor.
+ */
+TVM_DLL void TVMDLManagedTensorCallDeleter(DLManagedTensor* dltensor);
 
 /*!
  * \brief Create a new runtime stream.

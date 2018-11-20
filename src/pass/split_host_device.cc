@@ -153,7 +153,8 @@ class HostDeviceSplitter : public IRMutator {
 
   Stmt Mutate_(const AttrStmt *op, const Stmt& s) final {
     if (op->attr_key == attr::thread_extent ||
-        op->attr_key == attr::pipeline_exec_scope) {
+        op->attr_key == attr::pipeline_exec_scope ||
+        op->attr_key == attr::device_scope) {
       return SplitDeviceFunc(s);
     }
     return IRMutator::Mutate_(op, s);
@@ -165,8 +166,8 @@ class HostDeviceSplitter : public IRMutator {
       handle_data_type_[kv.first.get()] = kv.second;
     }
     name_ = f->name;
-    std::shared_ptr<LoweredFuncNode> n =
-        std::make_shared<LoweredFuncNode>(*f.operator->());
+    NodePtr<LoweredFuncNode> n =
+        make_node<LoweredFuncNode>(*f.operator->());
     n->body = this->Mutate(f->body);
     n->func_type = kHostFunc;
     Array<LoweredFunc> ret{LoweredFunc(n)};
@@ -180,7 +181,7 @@ class HostDeviceSplitter : public IRMutator {
   Stmt SplitDeviceFunc(Stmt body) {
     std::ostringstream os;
     os << name_ << "_kernel" << device_funcs_.size();
-    std::shared_ptr<LoweredFuncNode> n = std::make_shared<LoweredFuncNode>();
+    NodePtr<LoweredFuncNode> n = make_node<LoweredFuncNode>();
     // isolate the device function.
     IRUseDefAnalysis m;
     m.visit_thread_extent_ = false;
