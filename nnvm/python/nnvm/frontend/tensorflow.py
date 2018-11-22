@@ -342,7 +342,7 @@ def _matmul():
     def _impl(inputs, attr, params):
         channels = _infer_channels(inputs[1], params, not attr['transpose_b'])
         if attr['transpose_a']:
-            inputs[0] = _sym.transpose(inputs[0], axes(1, 0))
+            inputs[0] = _sym.transpose(inputs[0], axes=(1, 0))
         if not attr['transpose_b']:
             inputs[1] = _sym.transpose(inputs[1], axes=(1, 0))
         return AttrCvt(op_name="dense",
@@ -569,6 +569,7 @@ def _stridedSlice():
             m_begin = [0] * data_dim
             m_end = [0] * data_dim
             m_stride = [0] * data_dim
+            fshape_indices = []
             #Count new axis after ellipsis_mask, consider while applying ellipsis_mask.
             ellipsis_seen = False
             new_axes_after_ellipsis = 0
@@ -593,7 +594,10 @@ def _stridedSlice():
                         m_begin[final_index] = 0
                         m_end[final_index] = data_shape[0][final_index]
                         m_stride[final_index] = 1
+                        fshape_indices.append(final_index)
                         final_index += 1
+                elif mask &new_axis_mask:
+                    fshape_indices.append(-1)
                 elif not mask & new_axis_mask:
                     if final_index == len(m_begin):
                         break
@@ -614,28 +618,30 @@ def _stridedSlice():
                                                  if begin[index] < 0 else begin[index]
                         m_end[final_index] = begin[index] + 1
                         m_stride[final_index] = 1
-                    final_index += 1
-            return m_begin, m_end, m_stride
+                        fshape_indices.append(-2)
+                    else:
+                        fshape_indices.append(final_index)
 
+                    final_index += 1
+            return m_begin, m_end, m_stride, fshape_indices
+
+        fshape_indices = None
         if begin_mask or end_mask or ellipsis_mask or new_axis_mask or shrink_axis_mask:
-            begin, end, stride = _transform_mask(stride_dim, ellipsis_mask)
+            begin, end, stride, fshape_indices = _transform_mask(stride_dim, ellipsis_mask)
         out = _sym.strided_slice(inputs[0], begin=begin, end=end, stride=stride)
         out_shape = _infer_out_shapes(out, params)[0]
+        if not fshape_indices:
+            fshape_indices = range(len(out_shape))
 
         #Create final output shape.
         final_output = []
-        out_index = 0
-        index = 0
-        while out_index != len(out_shape):
-            #axis with shrink_axis_mask dimension=1 and it is ignored.
-            mask = 1 << index
-            if (new_axis_mask & mask) and not ellipsis_mask & mask:
+        for gather_index in fshape_indices:
+            if gather_index == -1:
                 final_output.append(1)
-            elif (not mask & shrink_axis_mask) or index >= stride_dim:
-                #Shrink is considered till stride_dim
-                final_output.append(out_shape[out_index])
-                out_index += 1
-            index += 1
+            elif gather_index == -2:
+                pass
+            else:
+                final_output.append(out_shape[gather_index])
         return _sym.reshape(out, shape=tuple(final_output))
     return _impl
 
@@ -1039,7 +1045,7 @@ class GraphProto(object):
         self._num_param = 0
         self._num_rnn_layer = False
 
-    def from_tensorflow(self, graph, layout="NHWC", shape=None):
+    def from_tensorflow(self, graph, layout="NHWC", shape=None, outputs=None):
         """Construct nnvm nodes from tensorflow  graph definition - GraphDef.
 
         Follow the tensorflow graph definition to parse and convert it to NNVM.
@@ -1086,6 +1092,7 @@ class GraphProto(object):
             raise NotImplementedError( \
                 "The following operators are not implemented: {}".format(missing_operators))
 
+        final_op = None
         # Parse the nodes to re-create TF graph using Symbol API of NNVM
         for node in graph.node:
             # Tensorflow doesn't have seperate list for params extraction.
@@ -1165,6 +1172,7 @@ class GraphProto(object):
 
                 # Assuming only one output.
                 self._nodes[node.name] = op
+                final_op = op
 
             # Infer shapes if passed explicitely
             node_output = self._nodes[node.name]
@@ -1175,13 +1183,16 @@ class GraphProto(object):
                 _, out_shapes = graph_util.infer_shape(g, **shape_dict)
                 self._output_shapes[node.name] = out_shapes
 
-        # Assume the final node is the output node
-        out = node_output
+        out = []
+        if outputs is None:
+            out.append(final_op)
+        else:
+            out = [self._nodes[out_name] for out_name in outputs]
 
         #Add the RNN outputs also with 'head' nodes of the nnvm graph
         if self._num_rnn_layer:
             out_rnn = _sym.concatenate(*self._out_rnn, axis=0)
-            out = [out, out_rnn]
+            out.append(out_rnn)
 
         if isinstance(out, list):
             out = _sym.Group(out)
@@ -1378,7 +1389,7 @@ class GraphProto(object):
 
         return inputs
 
-def from_tensorflow(graph, layout="NHWC", shape=None):
+def from_tensorflow(graph, layout="NHWC", shape=None, outputs=None):
     """  Load tensorflow graph which is a python tensorflow graph object into nnvm graph.
     The companion parameters will be handled automatically.
 
@@ -1396,5 +1407,5 @@ def from_tensorflow(graph, layout="NHWC", shape=None):
         Dict of converted parameters stored in tvm.ndarray format
     """
     g = GraphProto()
-    sym, params = g.from_tensorflow(graph, layout, shape)
+    sym, params = g.from_tensorflow(graph, layout, shape, outputs)
     return sym, params
