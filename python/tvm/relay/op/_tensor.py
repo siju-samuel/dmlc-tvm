@@ -20,6 +20,7 @@ register_schedule("round", schedule_broadcast)
 register_schedule("abs", schedule_broadcast)
 register_schedule("tanh", schedule_broadcast)
 register_schedule("negative", schedule_broadcast)
+register_schedule("copy", schedule_broadcast)
 
 register_schedule("add", schedule_broadcast)
 register_schedule("subtract", schedule_broadcast)
@@ -33,7 +34,7 @@ register_schedule("less", schedule_broadcast)
 register_schedule("less_equal", schedule_broadcast)
 register_schedule("greater", schedule_broadcast)
 register_schedule("greater_equal", schedule_broadcast)
-register_schedule("maximum_compute", schedule_injective)
+register_schedule("maximum", schedule_injective)
 register_schedule("minimum", schedule_injective)
 register_schedule("right_shift", schedule_injective)
 register_schedule("left_shift", schedule_injective)
@@ -79,12 +80,3 @@ def clip_compute(attrs, inputs, output_type, target):
     return [topi.clip(inputs[0], attrs.a_min, attrs.a_max)]
 
 register_schedule("clip", schedule_elemwise)
-register_pattern("clip", OpPattern.ELEMWISE)
-
-# concatenate
-@register_compute("concatenate")
-def concatenate_compute(attrs, inputs, output_type, target):
-    return [topi.concatenate(inputs, axis=attrs.axis)]
-
-register_schedule("concatenate", schedule_injective)
-register_pattern("concatenate", OpPattern.INJECTIVE)
