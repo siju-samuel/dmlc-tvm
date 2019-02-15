@@ -1,7 +1,7 @@
 """
-Auto-tuning a convolutional network for Mobile GPU
-==================================================
-**Author**: `Lianmin Zheng <https://https://github.com/merrymercy>`_, `Eddie Yan <https://github.com/eqy>`_
+Auto-tuning a convolutional network for Mobile GPU (NNVM)
+=========================================================
+**Author**: `Lianmin Zheng <https://https://github.com/merrymercy>`_
 
 Auto-tuning for a specific device is critical for getting the best
 performance. This is a tutorial about how to tune a whole convolutional
@@ -44,10 +44,10 @@ import os
 
 import numpy as np
 
+import nnvm.testing
+import nnvm.compiler
 import tvm
 from tvm import autotvm
-from tvm import relay
-import tvm.relay.testing
 from tvm.autotvm.tuner import XGBTuner, GATuner, RandomTuner, GridSearchTuner
 from tvm.contrib.util import tempdir
 import tvm.contrib.graph_runtime as runtime
@@ -55,9 +55,10 @@ import tvm.contrib.graph_runtime as runtime
 #################################################################
 # Define network
 # --------------
-# First we need to define the network in relay frontend API.
-# We can load some pre-defined network from :code:`relay.testing`.
-# We can also load models from MXNet, ONNX and TensorFlow.
+# First we need to define the network in nnvm symbol API.
+# We can load some pre-defined network from :code:`nnvm.testing`.
+# We can also load models from MXNet, ONNX and TensorFlow (see NNVM
+# tutorials :ref:`tutorial-nnvm` for more details).
 
 def get_network(name, batch_size):
     """Get the symbol definition and random weight of a network"""
@@ -66,23 +67,31 @@ def get_network(name, batch_size):
 
     if "resnet" in name:
         n_layer = int(name.split('-')[1])
-        net, params = relay.testing.resnet.get_workload(num_layers=n_layer, batch_size=batch_size, dtype=dtype)
+        net, params = nnvm.testing.resnet.get_workload(num_layers=n_layer, batch_size=batch_size)
     elif "vgg" in name:
         n_layer = int(name.split('-')[1])
-        net, params = relay.testing.vgg.get_workload(num_layers=n_layer, batch_size=batch_size, dtype=dtype)
+        net, params = nnvm.testing.vgg.get_workload(num_layers=n_layer, batch_size=batch_size)
     elif name == 'mobilenet':
-        net, params = relay.testing.mobilenet.get_workload(batch_size=batch_size, dtype=dtype)
+        net, params = nnvm.testing.mobilenet.get_workload(batch_size=batch_size)
     elif name == 'squeezenet_v1.1':
-        net, params = relay.testing.squeezenet.get_workload(batch_size=batch_size, version='1.1', dtype=dtype)
+        net, params = nnvm.testing.squeezenet.get_workload(batch_size=batch_size, version='1.1')
     elif name == 'inception_v3':
         input_shape = (1, 3, 299, 299)
-        net, params = relay.testing.inception_v3.get_workload(batch_size=batch_size, dtype=dtype)
+        net, params = nnvm.testing.inception_v3.get_workload(batch_size=batch_size)
+    elif name == 'custom':
+        # an example for custom network
+        from nnvm.testing import utils
+        net = nnvm.sym.Variable('data')
+        net = nnvm.sym.conv2d(net, channels=4, kernel_size=(3,3), padding=(1,1))
+        net = nnvm.sym.flatten(net)
+        net = nnvm.sym.dense(net, units=1000)
+        net, params = utils.create_workload(net, batch_size, (3, 224, 224))
     elif name == 'mxnet':
         # an example for mxnet model
         from mxnet.gluon.model_zoo.vision import get_model
         block = get_model('resnet18_v1', pretrained=True)
-        net, params = relay.frontend.from_mxnet(block, shape={'data': input_shape}, dtype=dtype)
-        net = relay.Function(net.params, relay.nn.softmax(net.body), None, net.type_params, net.attrs)
+        net, params = nnvm.frontend.from_mxnet(block)
+        net = nnvm.sym.softmax(net)
     else:
         raise ValueError("Unsupported network: " + name)
 
@@ -281,11 +290,12 @@ def tune_tasks(tasks,
 # Finally, we launch tuning jobs and evaluate the end-to-end performance.
 
 def tune_and_evaluate(tuning_opt):
-    # extract workloads from relay program
+    # extract workloads from nnvm graph
     print("Extract tasks...")
-    net, params, input_shape, _ = get_network(network, batch_size=1)
-    tasks = autotvm.task.extract_from_program(net, target=target, target_host=target_host,
-                                              params=params, ops=(relay.op.nn.conv2d,))
+    net, params, input_shape, out_shape = get_network(network, batch_size=1)
+    tasks = autotvm.task.extract_from_graph(net, target=target, target_host=target_host,
+                                            shape={'data': input_shape}, dtype=dtype,
+                                            symbols=(nnvm.sym.conv2d, nnvm.sym.dense))
 
     # run tuning tasks
     print("Tuning...")
@@ -294,9 +304,11 @@ def tune_and_evaluate(tuning_opt):
     # compile kernels with history best records
     with autotvm.apply_history_best(log_file):
         print("Compile...")
-        with relay.build_config(opt_level=3):
-            graph, lib, params = relay.build_module.build(
-                net, target=target, params=params, target_host=target_host)
+        with nnvm.compiler.build_config(opt_level=3):
+            graph, lib, params = nnvm.compiler.build(
+                net, target=target, target_host=target_host,
+                shape={'data': input_shape}, params=params, dtype=dtype)
+
         # export library
         tmp = tempdir()
         if use_android:
