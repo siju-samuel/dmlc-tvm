@@ -200,6 +200,9 @@ def _mx_slice_axis(inputs, attrs):
     axis = attrs.get_int("axis")
     ax_beg = attrs.get_int("begin")
     ax_end = attrs.get_str("end")
+    if axis < 0:
+        axis += len(shape)
+    assert axis >= 0 and axis < len(shape)
     if ax_end == "None":
         ax_end = int(shape[axis])
     else:
@@ -248,6 +251,11 @@ def _mx_softmax_output(inputs, attrs):
 def _mx_concat(inputs, attrs):
     axis = attrs.get_int("dim", 1)
     return _op.concatenate(tuple(inputs), axis=axis)
+
+
+def _mx_stack(inputs, attrs):
+    axis = attrs.get_int("axis", 0)
+    return _op.stack(tuple(inputs), axis=axis)
 
 
 def _mx_expand_dims(inputs, attrs):
@@ -349,6 +357,20 @@ def _mx_roi_align(inputs, attrs):
     new_attrs["sample_ratio"] = attrs.get_int("sample_ratio", -1)
     new_attrs["layout"] = "NCHW"
     return _op.vision.roi_align(inputs[0], inputs[1], **new_attrs)
+
+
+def _mx_proposal(inputs, attrs):
+    new_attrs = {}
+    new_attrs["scales"] = attrs.get_float_tuple("scales", (4.0, 8.0, 16.0, 32.0))
+    new_attrs["ratios"] = attrs.get_float_tuple("ratios", (0.5, 1.0, 2.0))
+    new_attrs["feature_stride"] = attrs.get_int("feature_stride", 16)
+    new_attrs["threshold"] = attrs.get_float("threshold", 0.7)
+    new_attrs["rpn_pre_nms_top_n"] = attrs.get_int("rpn_pre_nms_top_n", 6000)
+    new_attrs["rpn_post_nms_top_n"] = attrs.get_int("rpn_post_nms_top_n", 300)
+    new_attrs["rpn_min_size"] = attrs.get_int("rpn_min_size", 16)
+    new_attrs["iou_loss"] = attrs.get_bool("iou_loss", False)
+    assert not attrs.get_bool("output_score", False), "proposal doesn't support output score"
+    return _op.vision.proposal(inputs[0], inputs[1], inputs[2], **new_attrs)
 
 
 # Note: due to attribute conversion constraint
@@ -457,6 +479,7 @@ _convert_map = {
     "expand_dims"   : _mx_expand_dims,
     "Concat"        : _mx_concat,
     "concat"        : _mx_concat,
+    "stack"         : _mx_stack,
     "batch_dot"     : _mx_batch_dot,
     "LeakyReLU"     : _mx_leaky_relu,
     "_arange"       : _mx_arange,
@@ -466,6 +489,8 @@ _convert_map = {
     "_contrib_MultiBoxPrior" : _mx_multibox_prior,
     "_contrib_MultiBoxDetection" : _mx_multibox_detection,
     "_contrib_ROIAlign" : _mx_roi_align,
+    "_contrib_Proposal" : _mx_proposal,
+    "_contrib_MultiProposal" : _mx_proposal,
     # List of missing operators that are present in NNVMv1
     # TODO(tvm-tvm): support all operators.
     #
