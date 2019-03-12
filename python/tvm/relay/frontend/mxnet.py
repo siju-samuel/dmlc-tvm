@@ -298,6 +298,51 @@ def _mx_leaky_relu(inputs, attrs):
     raise RuntimeError("act_type: {} is not supported".format(act_type))
 
 
+def _mx_make_power(power):
+    def _impl(inputs, _):  # Note: no attrs
+        assert len(inputs) == 1
+        scalar = _expr.const(power, dtype=None)
+        # Note: int maps to "int32", float maps to "float32"
+        return _op.power(inputs[0], scalar)
+    return _impl
+
+
+def _mx_make_exponent(base):
+    # exp(b, x) = e^b * e^x
+    def _impl(inputs, _):  # Note: no attrs
+        assert len(inputs) == 1
+        scalar = _op.exp(_expr.const(base, dtype="float32"))
+        return _op.multiply(inputs[0], scalar)
+    return _impl
+
+
+def _mx_make_logarithm(base):
+    # log(b, x) = log(x) / log(b)
+    def _impl(inputs, _):  # Note: no attrs
+        assert len(inputs) == 1
+        scalar = _op.log(_expr.const(base, dtype="float32"))
+        return _op.divide(inputs[0], scalar)
+    return _impl
+
+
+def _mx_expm1():
+    # exp_minus_1 x = exp(x) - 1
+    def _impl(inputs, _):  # Note: no attrs
+        assert len(inputs) == 1
+        one = _expr.const(1, dtype="float32")
+        return _op.log(_op.subtract(inputs[0], one))
+    return _impl
+
+
+def _mx_log1p():
+    # 1_plus_log x = log(x + 1)
+    def _impl(inputs, _):  # Note: no attrs
+        assert len(inputs) == 1
+        one = _expr.const(1, dtype="float32")
+        return _op.log(_op.add(inputs[0], one))
+    return _impl
+
+
 def _mx_lrn(inputs, attrs):
     new_attrs = {}
     new_attrs["alpha"] = attrs.get_float("alpha", 0.0001)
@@ -328,13 +373,14 @@ def _mx_multibox_detection(inputs, attrs):
                                                                   0.2, 0.2))
 
     new_attrs1 = {}
-    new_attrs1["overlap_threshold"] = attrs.get_float("nms_threshold", 0.5)
+    new_attrs1["return_indices"] = False
+    new_attrs1["iou_threshold"] = attrs.get_float("nms_threshold", 0.5)
     new_attrs1["force_suppress"] = attrs.get_bool("force_suppress", False)
-    new_attrs1["topk"] = attrs.get_int("nms_topk", -1)
+    new_attrs1["top_k"] = attrs.get_int("nms_topk", -1)
 
     ret = _op.vision.multibox_transform_loc(inputs[0], inputs[1],
                                             inputs[2], **new_attrs0)
-    return _op.vision.nms(ret[0], ret[1], **new_attrs1)
+    return _op.vision.non_max_suppression(ret[0], ret[1], **new_attrs1)
 
 
 def _mx_batch_dot(inputs, attrs):
@@ -399,6 +445,49 @@ def _mx_proposal(inputs, attrs):
     return _op.vision.proposal(inputs[0], inputs[1], inputs[2], **new_attrs)
 
 
+def _mx_box_nms(inputs, attrs):
+    force_suppress = attrs.get_bool("force_suppress", False)
+    iou_thresh = attrs.get_float('overlap_thresh', 0.5)
+    top_k = attrs.get_int('topk', -1)
+    valid_thresh = attrs.get_float('valid_thresh', 0)
+    coord_start = attrs.get_int('coord_start', 2)
+    score_index = attrs.get_int('score_index', 1)
+    id_index = attrs.get_int('id_index', -1)
+    in_format = attrs.get_str('in_format', 'corner')
+    out_format = attrs.get_str('out_format', 'corner')
+    if coord_start != 2:
+        raise RuntimeError('coord_start %s is not supported.' % coord_start)
+    if score_index != 1:
+        raise RuntimeError('score_index %s is not supported.' % score_index)
+    if id_index != -1 and int(id_index) != 0:
+        raise RuntimeError('id_index %s is not supported.' % id_index)
+    if in_format != 'corner':
+        raise RuntimeError('in_format %s is not supported.' % in_format)
+    if out_format != 'corner':
+        raise RuntimeError('out_format %s is not supported.' % out_format)
+
+    ret = _op.vision.get_valid_counts(inputs[0], score_threshold=valid_thresh)
+    nms_out = _op.vision.non_max_suppression(ret[1],
+                                             ret[0],
+                                             iou_threshold=iou_thresh,
+                                             force_suppress=force_suppress,
+                                             top_k=top_k,
+                                             id_index=id_index,
+                                             return_indices=False,
+                                             invalid_to_bottom=True)
+    return nms_out
+
+
+def _mx_l2_normalize(inputs, attrs):
+    new_attrs = {}
+    mode = attrs.get_str('mode', 'instance')
+    if mode != 'channel':
+        raise RuntimeError('mode %s is not supported.' % mode)
+    new_attrs['eps'] = attrs.get_float('eps', 1e-10)
+    new_attrs['axis'] = [1]
+    return _op.nn.l2_normalize(inputs[0], **new_attrs)
+
+
 # Note: due to attribute conversion constraint
 # ops in the identity set must be attribute free
 _identity_list = [
@@ -406,7 +495,6 @@ _identity_list = [
     "exp",
     "sigmoid",
     "tanh",
-    "exp",
     "negative",
     "reshape_like",
     "zeros_like",
@@ -438,6 +526,20 @@ _convert_map = {
     "_minimum"               : _rename(_op.minimum),
     "flatten"                : _rename(_op.nn.batch_flatten),
     "Flatten"                : _rename(_op.nn.batch_flatten),
+    # scalar power
+    "square"                 : _mx_make_power(2),
+    "sqrt"                   : _mx_make_power(1/2),
+    "rsqrt"                  : _mx_make_power(-1/2),
+    "cbrt"                   : _mx_make_power(1/3),
+    "rcbrt"                  : _mx_make_power(-1/3),
+    "__pow_scalar__"         : _binop_scalar(_op.power),
+    "_power_scalar"          : _binop_scalar(_op.power),
+    "__rsub_scalar__"        : _rbinop_scalar(_op.subtract),
+    "_rminus_scalar"         : _rbinop_scalar(_op.subtract),
+    "__rdiv_scalar__"        : _rbinop_scalar(_op.divide),
+    "_rdiv_scalar"           : _rbinop_scalar(_op.divide),
+    "__rpow_scalar__"        : _rbinop_scalar(_op.power),
+    # scalar op
     "__add_scalar__"         : _binop_scalar(_op.add),
     "_plus_scalar"           : _binop_scalar(_op.add),
     "__sub_scalar__"         : _binop_scalar(_op.subtract),
@@ -446,13 +548,10 @@ _convert_map = {
     "_mul_scalar"            : _binop_scalar(_op.multiply),
     "__div_scalar__"         : _binop_scalar(_op.divide),
     "_div_scalar"            : _binop_scalar(_op.divide),
-    "__pow_scalar__"         : _binop_scalar(_op.power),
-    "_power_scalar"          : _binop_scalar(_op.power),
-    "__rsub_scalar__"        : _rbinop_scalar(_op.subtract),
-    "_rminus_scalar"         : _rbinop_scalar(_op.subtract),
-    "__rdiv_scalar__"        : _rbinop_scalar(_op.divide),
-    "_rdiv_scalar"           : _rbinop_scalar(_op.divide),
-    "__rpow_scalar__"        : _rbinop_scalar(_op.power),
+    "log2"                   : _mx_make_logarithm(2),
+    "log10"                  : _mx_make_logarithm(10),
+    "log1p"                  : _mx_log1p,
+    "expm1"                  : _mx_expm1,
     "_equal_scalar"          : _mx_compare(_op.equal, _binop_scalar),
     "_not_equal_scalar"      : _mx_compare(_op.not_equal, _binop_scalar),
     "_greater_scalar"        : _mx_compare(_op.greater, _binop_scalar),
@@ -462,6 +561,7 @@ _convert_map = {
     "_maximum_scalar"        : _binop_scalar(_op.maximum),
     "_minimum_scalar"        : _binop_scalar(_op.minimum),
     # reduction ops
+    "mean"          : _reduce(_op.mean),
     "max"           : _reduce(_op.max),
     "min"           : _reduce(_op.min),
     "sum"           : _reduce(_op.sum),
@@ -497,6 +597,7 @@ _convert_map = {
     "BatchNorm"     : _mx_batch_norm,
     "BatchNorm_v1"  : _mx_batch_norm,
     "LRN"           : _mx_lrn,
+    "L2Normalization"  : _mx_l2_normalize,
     "slice"         : _mx_slice,
     "slice_like"    : _mx_slice_like,
     "slice_axis"    : _mx_slice_axis,
@@ -520,6 +621,7 @@ _convert_map = {
     "_contrib_ROIAlign" : _mx_roi_align,
     "_contrib_Proposal" : _mx_proposal,
     "_contrib_MultiProposal" : _mx_proposal,
+    "_contrib_box_nms" : _mx_box_nms,
     # List of missing operators that are present in NNVMv1
     # TODO(tvm-tvm): support all operators.
     #
@@ -662,6 +764,8 @@ def from_mxnet(symbol,
             params[k] = _nd.array(v.data().asnumpy())
         data = mx.sym.Variable("data")
         sym = symbol(data)
+        if isinstance(sym, (list, tuple)):
+            sym = mx.sym.Group(sym)
         shape, dtype = _update_shape_dtype(shape, dtype, params)
         sym = _from_mxnet_impl(sym, shape, dtype)
     elif isinstance(symbol, mx.gluon.Block):
