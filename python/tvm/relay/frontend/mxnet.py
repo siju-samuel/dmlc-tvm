@@ -422,6 +422,13 @@ def _mx_tile(inputs, attrs):
     return _op.tile(inputs[0], **new_attrs)
 
 
+def _mx_reverse(inputs, attrs):
+    assert len(inputs) == 1
+    new_attrs = {}
+    new_attrs["axis"] = attrs.get_int("axis")
+    return _op.reverse(inputs[0], **new_attrs)
+
+
 def _mx_roi_align(inputs, attrs):
     new_attrs = {}
     new_attrs["pooled_size"] = attrs.get_int_tuple("pooled_size")
@@ -486,6 +493,19 @@ def _mx_l2_normalize(inputs, attrs):
     new_attrs['eps'] = attrs.get_float('eps', 1e-10)
     new_attrs['axis'] = [1]
     return _op.nn.l2_normalize(inputs[0], **new_attrs)
+
+
+def _mx_shape_array(inputs, attrs):
+    assert len(inputs) == 1
+    if attrs.get_int("lhs_begin", None) is not None:
+        raise RuntimeError("shape_array doesn't support lhs_begin")
+    if attrs.get_int("lhs_end", None) is not None:
+        raise RuntimeError("shape_array doesn't support lhs_end")
+    if attrs.get_int("rhs_begin", None) is not None:
+        raise RuntimeError("shape_array doesn't support rhs_begin")
+    if attrs.get_int("rhs_end", None) is not None:
+        raise RuntimeError("shape_array doesn't support rhs_end")
+    return _op.shape_of(inputs[0], dtype='int64')
 
 
 # Note: due to attribute conversion constraint
@@ -612,7 +632,9 @@ _convert_map = {
     "_arange"       : _mx_arange,
     "repeat"        : _mx_repeat,
     "tile"          : _mx_tile,
+    "reverse"       : _mx_reverse,
     "BlockGrad"     : _mx_BlockGrad,
+    "shape_array"   : _mx_shape_array,
     "SoftmaxOutput" : _mx_softmax_output,
     "SoftmaxActivation" : _mx_softmax_activation,
     # vision
