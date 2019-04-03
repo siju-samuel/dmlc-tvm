@@ -19,8 +19,8 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import init_ops
-from tensorflow.core.framework import graph_pb2
 
+from distutils.version import LooseVersion
 import tvm.relay.testing.tf as tf_testing
 
 #######################################################################
@@ -108,7 +108,6 @@ def compare_tf_with_tvm(in_data, in_name, out_name, init_global_variables=False,
     in_node = [0]*len(in_name)
     for i in range(len(in_name)):
         in_node[i] = in_name[i].split(':')[0] if ":" in in_name[i] else in_name[i]
-
     with tf.Session() as sess:
         if init_global_variables:
             sess.run(variables.global_variables_initializer())
@@ -473,17 +472,17 @@ def test_forward_stridedslice():
 
 
 #######################################################################
-# Gather
-# ------
+# Gather, GatherV2
+# ----------------
 
 def _test_gather(ip_shape, indice_shape, indice_value, axis, dtype):
-    """ One iteration of a Gather """
+    """ One iteration of a GatherV2 """
 
     tf.reset_default_graph()
     in_data = tf.placeholder(dtype, ip_shape, name="in_data")
     indices = tf.placeholder("int32", indice_shape, name="indices")
     tf.gather(in_data, indices, axis=axis)
-    np_data = np.random.uniform(size=ip_shape).astype(dtype)
+    np_data = np.random.uniform(1, 10, size=ip_shape).astype(dtype)
 
     def _fill_indices(indice_value):
         indices = np.array(ip_shape, dtype=dtype)
@@ -497,17 +496,55 @@ def _test_gather(ip_shape, indice_shape, indice_value, axis, dtype):
     compare_tf_with_tvm([np_data, np_indices], ['in_data:0', 'indices:0'], 'GatherV2:0')
 
 def test_forward_gather():
-    '''test gather layer'''
+    '''test GatherV2 layer'''
     _test_gather((4,), (1,), 1, 0, 'int32')
     _test_gather((4,), (1,), 1, 0, 'float32')
-    _test_gather((1,4), (1,), [0], 0, 'int32')
-    _test_gather((4,), (1,2,2), [[[1,0],[0,1]]], 0, 'float32')
-    _test_gather((2,2), (1,2,2), [[[1,0],[0,1]]], 0, 'int32')
-    _test_gather((2,2), (1,2,2), [[[1,0],[0,1]]], 1, 'int32')
-    _test_gather((2,2), (1,2,2), [[[1,0],[0,1]]], 0, 'float32')
-    _test_gather((3,3,3), (1,1,2), [[[1,0]]], 0, 'int32')
-    _test_gather((3,3,3), (1,1,2), [[[1,0]]], 2, 'int32')
-    _test_gather((4,3,5,6), (1,4), [[2,1,0,0]], 0, 'float32')
+    _test_gather((1, 4), (1,), [0], 0, 'int32')
+    _test_gather((4,), (1, 2, 2), [[[1, 0],[0, 1]]], 0, 'float32')
+    _test_gather((2, 2), (1, 2, 2), [[[1, 0],[0, 1]]], 0, 'int32')
+    _test_gather((2, 2), (1, 2, 2), [[[1, 0],[0, 1]]], 1, 'int32')
+    _test_gather((2, 2), (1, 2, 2), [[[1, 0],[0, 1]]], 0, 'float32')
+    _test_gather((3, 3, 3), (1, 1, 2), [[[1, 0]]], 0, 'int32')
+    _test_gather((3, 3, 3), (1, 1, 2), [[[1, 0]]], 2, 'int32')
+    _test_gather((4, 3, 5, 6), (1, 4), [[2, 1, 0, 0]], 0, 'float32')
+
+
+def _test_gather_v1(ip_shape, indice_shape, indice_value, dtype):
+    """ One iteration of a Gather"""
+    tf.reset_default_graph()
+    in_data = tf.placeholder(dtype, ip_shape, name="in_data")
+    indices = tf.placeholder("int32", indice_shape, name="indices")
+    tf.gather(in_data, indices)
+    np_data = np.random.uniform(size=ip_shape).astype(dtype)
+
+    def _fill_indices(indice_value):
+        indices = np.array(ip_shape, dtype=dtype)
+        if isinstance(indice_value, int):
+            indices = np.array([indice_value], dtype='int32')
+        else:
+            indices = np.asarray(indice_value, dtype='int32')
+        return indices
+    np_indices = _fill_indices(indice_value)
+
+    compare_tf_with_tvm([np_data, np_indices], ['in_data:0', 'indices:0'], 'Gather:0')
+
+
+def test_forward_gather_v1():
+    '''test gather layer'''
+
+    if tf.__version__ < LooseVersion('1.7'):
+        _test_gather_v1((4,), (1, 2, 2), [[[1, 0], [0, 1]]], 'float32')
+        _test_gather_v1((4,), (1,), 1, 'int32')
+        _test_gather_v1((4,), (1,), 1, 'float32')
+        _test_gather_v1((1, 4), (1,), [0], 'int32')
+        _test_gather_v1((4,), (1, 2, 2), [[[1, 0], [0, 1]]], 'float32')
+        _test_gather_v1((2, 2), (1, 2, 2), [[[1, 0], [0, 1]]], 'int32')
+        _test_gather_v1((2, 2), (1, 2, 2), [[[1, 0], [0, 1]]], 'int32')
+        _test_gather_v1((2, 2), (1, 2, 2), [[[1, 0], [0, 1]]], 'float32')
+        _test_gather_v1((3, 3, 3), (1, 1, 2), [[[1, 0]]], 'int32')
+        _test_gather_v1((3, 3, 3), (1, 1, 2), [[[1, 0]]], 'int32')
+        _test_gather_v1((4, 3, 5, 6), (1, 4), [[2, 1, 0, 0]], 'float32')
+
 
 #######################################################################
 # Split
@@ -582,10 +619,10 @@ def _test_unstack(ip_shape, axis, dtype):
 def test_forward_unstack():
     '''test unstack layer'''
     _test_unstack((6,), 0, 'int32')
-    _test_unstack((2,6), 1, 'float64')
+    _test_unstack((2, 6), 1, 'float64')
     # negative axis
-    _test_unstack((1,4), -1, 'int32')
-    _test_unstack((3,6,4), -2, 'float32')
+    _test_unstack((1, 4), -1, 'int32')
+    _test_unstack((3, 6, 4), -2, 'float32')
 
 
 #######################################################################
@@ -823,6 +860,22 @@ def test_forward_logical():
     test_logical_or()
     test_logical_xor()
     test_logical_not()
+
+
+#######################################################################
+# Where, Select
+# -------------
+def test_where():
+    ''' Where: return elements depending on conditions'''
+    with tf.Graph().as_default():
+        with tf.Session() as sess:
+            input1 = tf.placeholder(tf.int32, shape=[1, 4, 4, 3], name='input1')
+            input2 = tf.placeholder(tf.int32, shape=[1, 4, 4, 3], name='input2')
+            mask = input1 > input2
+            tf.where(mask, input1 + 1, input2 * 2)
+            in_data1 = np.random.uniform(0, 10, size=(1, 4, 4, 3)).astype("uint32")
+            in_data2 = np.random.uniform(0, 10, size=(1, 4, 4, 3)).astype("uint32")
+            compare_tf_with_tvm([in_data1, in_data2], ['input1:0', 'input2:0'], 'Select:0')
 
 
 #######################################################################
@@ -1213,6 +1266,7 @@ if __name__ == '__main__':
     test_forward_crop()
     test_forward_pad()
     test_forward_gather()
+    test_forward_gather_v1()
     test_forward_stridedslice()
     test_forward_split()
     test_forward_unstack()
@@ -1260,3 +1314,4 @@ if __name__ == '__main__':
     # Relational ops
     test_forward_rel_ops()
     test_forward_logical()
+    test_where()
