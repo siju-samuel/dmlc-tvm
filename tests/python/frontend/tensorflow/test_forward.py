@@ -580,6 +580,7 @@ def _test_stridedslice(ip_shape, begin, end, stride, dtype,
 def test_forward_stridedslice():
     '''test StridedSlice'''
 
+    _test_stridedslice((2), [1], [1], [1], 'float32', shrink_axis_mask=1)
     _test_stridedslice((3, 4, 3), [1, -1, 0], [4, -5, 3], [2, -1, 1], 'float32')
     _test_stridedslice((3, 4, 3), [1, 0], [4, 3], [2, 1], 'float32', ellipsis_mask=8)
     _test_stridedslice((3, 4, 3), [1, 0], [4, 2], [2, 1], 'float32', ellipsis_mask=2)
@@ -1428,16 +1429,16 @@ def test_forward_sign():
     compare_tf_with_tvm([np_data], ['in_data:0'], 'sign:0')
 
 def test_forward_pow_exp():
-    """test Pow"""
-    np_in1 = np.random.uniform(-10, 10, size=(5, 7, 11)).astype(np.float32)
-    np_in2 = np.random.uniform(-10, 10, size=(5, 7, 11)).astype(np.float32)
+    """test Pow and Exp """
+    np_in1 = np.random.uniform(-2, 2, size=(5, 7, 11)).astype(np.float32)
+    np_in2 = np.random.uniform(-2, 2, size=(5, 7, 11)).astype(np.float32)
     tf.reset_default_graph()
     in1 = tf.placeholder(tf.float32, (5, 7, 11), name="in1")
     in2 = tf.placeholder(tf.float32, (5, 7, 11), name="in2")
     out1 = tf.pow(in1, in2, name="pow")
-    out = tf.exp(out1, name='exp')
+    out = tf.exp(in1, name='exp')
     compare_tf_with_tvm([np_in1, np_in2], ['in1:0', 'in2:0'], 'pow:0')
-    compare_tf_with_tvm([np_in1, np_in2], ['in1:0', 'in2:0'], 'exp:0')
+    compare_tf_with_tvm([np_in1], ['in1:0'], 'exp:0')
 
 #######################################################################
 # Mean
@@ -1475,6 +1476,21 @@ def test_forward_rel_ops():
     _test_forward_rel_op([t1, t2], math_ops.equal)
     _test_forward_rel_op([t1, t2], math_ops.not_equal)
 
+#######################################################################
+# ExpandDims
+# ----------
+def _test_forward_expand_dims(data, axis):
+    in1 = tf.placeholder(shape=data.shape, dtype=data.dtype, name='in1')
+    out = tf.expand_dims(in1, axis)
+    compare_tf_with_tvm([data], [in1.name], out.name)
+
+def test_forward_expand_dims():
+    _test_forward_expand_dims(np.int32(1), 0)
+    _test_forward_expand_dims(np.array([1]), 0)
+    _test_forward_expand_dims(np.array([1]), -1)
+    _test_forward_expand_dims(np.array([[1], [2]]), 0)
+    _test_forward_expand_dims(np.array([[1], [2]]), 1)
+    _test_forward_expand_dims(np.array([[1], [2]]), -1)
 
 #######################################################################
 # Main
@@ -1509,6 +1525,7 @@ if __name__ == '__main__':
     test_forward_reverse_v2()
     test_forward_pow_exp()
     test_forward_sign()
+    test_forward_expand_dims()
 
     # Reductions
     test_forward_argminmax()
