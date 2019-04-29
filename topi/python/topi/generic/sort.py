@@ -1,4 +1,3 @@
-#!/bin/bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,15 +14,25 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=invalid-name, no-member
+"""Generic vision operators"""
+from __future__ import absolute_import as _abs
+import tvm
+from .vision import _default_schedule
 
-set -e
-set -u
-set -o pipefail
+@tvm.target.generic_func
+def schedule_argsort(outs):
+    """Schedule for argsort operator.
 
-wget -q https://sdk.lunarg.com/sdk/download/1.0.65.0/linux/vulkansdk-linux-x86_64-1.0.65.0.run
+    Parameters
+    ----------
+    outs: Array of Tensor
+      The indices that would sort an input array along
+      the given axis.
 
-bash vulkansdk-linux-x86_64-1.0.65.0.run
-mv VulkanSDK /usr/local/VulkanSDK
-cd /usr/local/VulkanSDK/1.0.65.0
-./build_tools.sh
-./build_samples.sh
+    Returns
+    -------
+    s: Schedule
+      The computation schedule for the op.
+    """
+    return _default_schedule(outs, False)
