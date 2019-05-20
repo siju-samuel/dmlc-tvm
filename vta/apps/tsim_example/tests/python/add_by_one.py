@@ -15,25 +15,25 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.2)
-project(tsim C CXX)
+import tvm
+import numpy as np
 
-set(TVM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../)
-set(VTA_DIR ${TVM_DIR}/vta)
+from tsim.driver import driver
 
-include_directories("${TVM_DIR}/include")
-include_directories("${TVM_DIR}/3rdparty/dlpack/include")
-include_directories("${TVM_DIR}/3rdparty/dmlc-core/include")
-include_directories("${TVM_DIR}/vta/src/dpi")
+def test_tsim(i):
+    rmin = 1 # min vector size of 1
+    rmax = 64
+    n = np.random.randint(rmin, rmax)
+    ctx = tvm.cpu(0)
+    a = tvm.nd.array(np.random.randint(rmax, size=n).astype("uint64"), ctx)
+    b = tvm.nd.array(np.zeros(n).astype("uint64"), ctx)
+    f = driver("libhw", "libsw")
+    f(a, b)
+    emsg = "[FAIL] test number:{} n:{}".format(i, n)
+    np.testing.assert_equal(b.asnumpy(), a.asnumpy() + 1, err_msg=emsg)
+    print("[PASS] test number:{} n:{}".format(i, n))
 
-set(CMAKE_C_FLAGS "-O2 -Wall -fPIC -fvisibility=hidden")
-set(CMAKE_CXX_FLAGS "-O2 -Wall -fPIC -fvisibility=hidden -std=c++11")
-
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
-  set(CMAKE_CXX_FLAGS "-faligned-new ${CMAKE_CXX_FLAGS}")
-endif()
-
-# Module rules
-include(cmake/modules/hw.cmake)
-include(cmake/modules/sw.cmake)
+if __name__ == "__main__":
+    times = 10
+    for i in range(times):
+        test_tsim(i)

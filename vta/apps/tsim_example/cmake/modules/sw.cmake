@@ -15,25 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.2)
-project(tsim C CXX)
+file(GLOB TSIM_SW_SRC src/driver.cc)
+add_library(sw SHARED ${TSIM_SW_SRC})
+target_include_directories(sw PRIVATE ${VTA_DIR}/include)
 
-set(TVM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../)
-set(VTA_DIR ${TVM_DIR}/vta)
-
-include_directories("${TVM_DIR}/include")
-include_directories("${TVM_DIR}/3rdparty/dlpack/include")
-include_directories("${TVM_DIR}/3rdparty/dmlc-core/include")
-include_directories("${TVM_DIR}/vta/src/dpi")
-
-set(CMAKE_C_FLAGS "-O2 -Wall -fPIC -fvisibility=hidden")
-set(CMAKE_CXX_FLAGS "-O2 -Wall -fPIC -fvisibility=hidden -std=c++11")
-
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
-  set(CMAKE_CXX_FLAGS "-faligned-new ${CMAKE_CXX_FLAGS}")
-endif()
-
-# Module rules
-include(cmake/modules/hw.cmake)
-include(cmake/modules/sw.cmake)
+if(APPLE)
+  set_target_properties(sw PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+endif(APPLE)
