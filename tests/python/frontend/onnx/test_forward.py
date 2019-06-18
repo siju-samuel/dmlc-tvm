@@ -1075,6 +1075,7 @@ def test_LogSoftmax():
                               'LogSoftmax',
                               {'axis': 1})
 
+
 def check_torch_conversion(model, input_size):
     dummy_input = torch.randn(*input_size)
     file_name = '{}.onnx'.format(model.__name__)

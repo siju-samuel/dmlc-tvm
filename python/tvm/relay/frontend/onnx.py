@@ -23,6 +23,7 @@ import numpy as np
 import tvm
 from ... import nd as _nd
 from .. import ir_pass
+from .. import transform as _transform
 from .. import expr as _expr
 from .. import module as _module
 from .. import op as _op
@@ -413,19 +414,22 @@ class Reshape(OnnxOpConverter):
             logging.warning("Constant evaluating Reshape's shape argument, may reduce performance")
             shape_params = ir_pass.free_vars(shape)
             func = _expr.Function(shape_params, shape)
-            func = ir_pass.infer_type(func)
-            func = ir_pass.fold_constant(func)
-            shape_params = ir_pass.free_vars(func.body)
-            func = _expr.Function(shape_params, func.body)
+            mod = _module.Module.from_expr(func)
+            seq = _transform.Sequential([_transform.InferType(),
+                                         _transform.FoldConstant(),
+                                         _transform.FuseOps(0),
+                                         _transform.InferType()])
+            with tvm.relay.PassContext(opt_level=2):
+                mod = seq(mod)
             with tvm.relay.build_config(opt_level=0):
-                ex = tvm.relay.create_executor("debug")
+                ex = tvm.relay.create_executor("debug", mod=mod)
                 inputs = []
                 for sp in shape_params:
                     if not sp.name_hint in params:
                         sh = [int(i) for i in sp.type_annotation.shape]
                         inputs.append(
                             tvm.nd.array(np.random.rand(*sh).astype('float32')))
-                static_shape = ex.evaluate(func)(*inputs, **params)
+                static_shape = ex.evaluate()(*inputs, **params)
             out = _op.reshape(data, newshape=tuple(static_shape.asnumpy()))
 
         return out
@@ -571,7 +575,7 @@ class Shape(OnnxOpConverter):
 
     @classmethod
     def _impl_v1(cls, inputs, attr, params):
-        # TODO(@jroesch): use shape_of once it has been fixed
+        # TODO(@jroesch): use shape_of once it has been fixed)
         return _op.shape_of(inputs[0])
 
 class Cast(OnnxOpConverter):
