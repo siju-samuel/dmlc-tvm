@@ -16,14 +16,35 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-v0.0.3
 
-def @id[a](%x: a) -> a {
-    %x
+/*!
+ * Copyright (c) 2019 by Contributors
+ *
+ * \file src/relay/pass/print_ir.cc
+ *
+ * \brief Print the module IR to help debugging.
+ */
+#include <tvm/relay/expr.h>
+#include <tvm/relay/transform.h>
+
+namespace tvm {
+namespace relay {
+
+namespace transform {
+
+Pass PrintIR() {
+  runtime::TypedPackedFunc<Module(Module, PassContext)> pass_func =
+    [=](Module m, PassContext pc) {
+      LOG(INFO) << "Dumping the module IR: " << std::endl << AsText(m);
+      return m;
+  };
+  return CreateModulePass(pass_func, 0, "PrintIR", {});
 }
 
-def @compose[a, b, c](%f: fn(b) -> c, %g: fn(a) -> b) {
-    fn (%x: a) -> c {
-        %f(%g(%x))
-    }
-}
+TVM_REGISTER_API("relay._transform.PrintIR")
+.set_body_typed(PrintIR);
+
+}  // namespace transform
+
+}  // namespace relay
+}  // namespace tvm
