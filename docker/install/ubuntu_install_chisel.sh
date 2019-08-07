@@ -1,3 +1,4 @@
+#!/bin/bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -14,25 +15,13 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Backend compiler related feature registration"""
-from __future__ import absolute_import
 
-import topi
-from . import op as _reg
+set -e
+set -u
+set -o pipefail
 
-
-def _schedule_reduce(_, outs, target):
-    """Generic schedule for reduce"""
-    with target:
-        return topi.generic.schedule_reduce(outs)
-
-
-_reg.register_schedule("argmax", _schedule_reduce)
-_reg.register_schedule("argmin", _schedule_reduce)
-_reg.register_schedule("sum", _schedule_reduce)
-_reg.register_schedule("all", _schedule_reduce)
-_reg.register_schedule("max", _schedule_reduce)
-_reg.register_schedule("min", _schedule_reduce)
-_reg.register_schedule("prod", _schedule_reduce)
-_reg.register_schedule("mean", _schedule_reduce)
-_reg.register_schedule("variance", _schedule_reduce)
+# Install the necessary dependencies for Chisel
+echo "deb https://dl.bintray.com/sbt/debian /" | sudo tee -a /etc/apt/sources.list.d/sbt.list
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89B84B2DF73499E82A75642AC823
+sudo apt-get update
+sudo apt-get install -y verilator sbt
